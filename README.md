@@ -10,7 +10,7 @@
     Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_EnablePSLogging,CFG_ApplySTIGItems,CFG_DisableAutoRun,CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableVDIOptimizations,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,CFG_RemoveActiveSetupComponents,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_DisableEdgeIconCreation,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_EnableRemoteRegistry,CFG_DisableFirewall,CFG_ApplyPrivacyMitigations,CFG_EnableCredGuard,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableWinRM,CFG_EnableAppsRunAsAdmin,CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_DisableIndexing
 
 
-'// Configuration Settings (Win10OptimizeAndConfig.ps1)
+    '// Configuration Settings (Win10OptimizeAndConfig.ps1)
     CFG_UseLGPOForConfigs=True
     CFG_SetPowerCFG=[Custom|High Performance|Balanced]
     CFG_PowerCFGFilePath=%DeployRoot%\Scripts\Custom\OS-Configs\AlwaysOnPowerScheme.pow
@@ -54,6 +54,6 @@
     CFG_PreCompileAssemblies=True
     CFG_DisableIndexing=True
 
-'// Path to LGPO.exe
-LGPOPath=%DeployRoot%\Scripts\Custom\OS-Configs\Tools\LGPO
+    '// Path to LGPO.exe
+    LGPOPath=%DeployRoot%\Scripts\Custom\OS-Configs\Tools\LGPO
 
