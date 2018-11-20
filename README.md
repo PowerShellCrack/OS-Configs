@@ -57,3 +57,6 @@
     '// Path to LGPO.exe
     LGPOPath=%DeployRoot%\Scripts\Custom\OS-Configs\Tools\LGPO
 
+### Originators/Credit
+
+* [@AdmiralTolwyn](https://github.com/AdmiralTolwyn) (Anton Romanyuk)
