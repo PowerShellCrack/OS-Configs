@@ -1,13 +1,13 @@
 # Windows 10 Optimization And Configurations
  - Applies all types of settings for Windows 10. Script variables can be set either internal (standalone) or using MDT/SCCM Task sequence custom properties. Ultimately MDT/SCCM properties will overwrite internal variable if set. 
 
-## Options not working (yet)
-** Reason: the goal is to set any registry settings within local gpo instead of hard coding the registry **
- - CFG_UseLGPOForConfigs=True 
- - LGPOPath=%DeployRoot%\Scripts\Custom\OS-Configs\Tools\LGPO
+## Prerequisites
+ - Group Policy Support - download LGPO (https://www.microsoft.com/en-us/download/confirmation.aspx?id=55319) and place it ins the Tools folder
+ - CredGuard Support - download creadguard script by Microsoft (https://www.microsoft.com/en-us/download/confirmation.aspx?id=53337)
+ - Modules Install - Any Modules, place in PSModules directory
  
 ## Add to MDT CustomSettings.ini
-    Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_EnablePSLogging,CFG_ApplySTIGItems,CFG_DisableAutoRun,CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableVDIOptimizations,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,CFG_RemoveActiveSetupComponents,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_DisableEdgeIconCreation,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_EnableRemoteRegistry,CFG_DisableFirewall,CFG_ApplyPrivacyMitigations,CFG_EnableCredGuard,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableWinRM,CFG_EnableAppsRunAsAdmin,CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_DisableIndexing,CFG_EnableSecureLogon,CFG_HideDrives,CFG_DisableAllNotifications
+    Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_EnablePSLogging,CFG_ApplySTIGItems,CFG_DisableAutoRun,CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableVDIOptimizations,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,CFG_RemoveActiveSetupComponents,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_DisableEdgeIconCreation,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_EnableRemoteRegistry,CFG_DisableFirewall,CFG_ApplyPrivacyMitigations,CFG_EnableCredGuard,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableWinRM,CFG_EnableAppsRunAsAdmin,CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_DisableIndexing,CFG_EnableSecureLogon,CFG_HideDrives,CFG_DisableAllNotifications,CFG_InstallPSModules
 
 
     '// Configuration Settings (Win10OptimizeAndConfig.ps1)
@@ -56,6 +56,7 @@
     CFG_EnableSecureLogon = false
     CFG_HideDrives = false
     CFG_DisableAllNotifications = false
+    CFG_InstallPSModules = true
 
     '// Path to LGPO.exe
     LGPOPath=%DeployRoot%\Scripts\Custom\OS-Configs\Tools\LGPO
