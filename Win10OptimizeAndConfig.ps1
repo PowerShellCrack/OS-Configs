@@ -3,10 +3,63 @@
 	===========================================================================
 	 Originally Created by:   	Anton Romanyuk
      Added more capibilities:   Richard Tracy
-	 Filename:     	ApplyWin10Otimizations.ps1
+	 Filename:     	            Win10OptimizeAndConfig.ps1
+     Last Updated:              12/14/2018
 	===========================================================================
 	.DESCRIPTION
-		Applies Windows 10 enterprise-oriented optimizations and privacy mitigations 
+		Applies Windows 10 Optimazations and configurations. Supports VDI optmizations
+        Utilizes LGPO.exe to apply group policy item where neceassary. 
+        Supports MDT/SCCM TaskSequence variables:
+           _SMSTSLogPath . Logs to temp if not used
+        Configurable using custom variables:
+            CFG_UseLGPOForConfigs
+            LGPOPath
+            CFG_SetPowerCFG
+            CFG_PowerCFGFilePath
+            CFG_EnableVerboseMsg
+            CFG_EnablePSLogging
+            CFG_ApplySTIGItems
+            CFG_DisableAutoRun
+            CFG_CleanSampleFolders
+            CFG_DisableCortana
+            CFG_DisableInternetSearch
+            CFG_EnableVDIOptimizations
+            CFG_EnableOfficeOneNote
+            CFG_EnableRDP
+            CFG_DisableOneDrive
+            CFG_PreferIPv4OverIPv6
+            CFG_RemoveActiveSetupComponents
+            CFG_DisableWindowsFirstLoginAnimation
+            CFG_DisableIEFirstRunWizard
+            CFG_DisableWMPFirstRunWizard
+            CFG_DisableEdgeIconCreation
+            CFG_DisableNewNetworkDialog
+            CFG_DisableInternetServices
+            CFG_DisabledUnusedServices
+            CFG_DisabledUnusedFeatures
+            CFG_DisableSchTasks
+            CFG_DisableDefender
+            CFG_DisableFirewall
+            CFG_DisableWireless
+            CFG_DisableBluetooth
+            CFG_EnableRemoteRegistry
+            CFG_DisableFirewall
+            CFG_ApplyPrivacyMitigations
+            CFG_EnableCredGuard
+            CFG_InstallLogonScript
+            CFG_LogonScriptPath
+            CFG_EnableWinRM
+            CFG_EnableAppsRunAsAdmin
+            CFG_DisableUAC
+            CFG_DisableWUP2P
+            CFG_EnableIEEnterpriseMode
+            CFG_IEEMSiteListPath
+            CFG_PreCompileAssemblies
+            CFG_DisableIndexing
+            CFG_EnableSecureLogon
+            CFG_HideDrives
+            CFG_DisableAllNotifications
+            CFG_InstallPSModules
 #>
 
 
@@ -120,20 +173,28 @@ function Disable-Indexing {
 
 
 
-Function Set-RegistryItembyLGPO {
+Function Configure-RegistryItem {
     [CmdletBinding()] 
     Param (
-    $RegPath,
-    $Name,
-    $Value,
-    [Parameter(Mandatory=$true)][ValidateSet('None','SZ','EXPAND_SZ','BINARY','MultiString','DWord')]$Type,
-    $TryLGPO,
-    $LGPOExe,
-    $LogPath
+    [Parameter(Mandatory=$true)]
+    [Alias("Path")]
+    [string]$RegPath,
+    [Parameter(Mandatory=$false)]
+    [string]$Name,
+    [Parameter(Mandatory=$true)]
+    [string]$Value,
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('None','String','Binary','DWord','ExpandString','MultiString','QWord')]
+    [Alias("PropertyType")]
+    $Type,
+    [boolean]$TryLGPO = $Global:LGPOForConfigs,
+    $LGPOExe = $Global:LGPOPath,
+    [string]$LogPath,
+    [switch]$Force
     )
     Begin
     {
-        If($TryLGPO){
+         If($TryLGPO){
             #$lgpoout = $null
             $lgpoout = "; ----------------------------------------------------------------------`r`n"
             $lgpoout += "; PROCESSING POLICY`r`n"
@@ -144,52 +205,96 @@ Function Set-RegistryItembyLGPO {
 
     Process
     {
-        If($TryLGPO){
-            $RegKeyHive = ($RegPath).Split('\')[0]
-            $RegKeyPath = Split-Path ($RegPath).Split('\',2)[1] -Parent
+        If($TryLGPO -and $LGPOExe){
+            If(Test-Path $LGPOExe){
+                $RegKeyHive = ($RegPath).Split('\')[0].Replace(':','')
+                #if Name not specified, grab last value from full path
+                If(!$Name){
+                    $RegKeyPath = Split-Path ($RegPath).Split('\',2)[1] -Parent
+                    $RegKeyName = Split-Path ($RegPath).Split('\',2)[1] -Leaf
+                }
+                Else{
+                    $RegKeyPath = ($RegPath).Split('\',2)[1]
+                    $RegKeyName = $Name
+                }
 
-            #The -split operator supports specifying the maximum number of sub-strings to return.
-            #Some values may have additional commas in them that we don't want to split (eg. LegalNoticeText)
-            [String]$Value = $Value -split ',',2
+                #The -split operator supports specifying the maximum number of sub-strings to return.
+                #Some values may have additional commas in them that we don't want to split (eg. LegalNoticeText)
+                [String]$Value = $Value -split ',',2
 
-            Switch($RegKeyHive){
-                MACHINE {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
-                USER {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
-            }
+                Switch($RegKeyHive){
+                    HKEY_LOCAL_MACHINE {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
+                    MACHINE {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
+                    HKLM {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
+                    HKEY_CURRENT_USER {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
+                    HKEY_USERS {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
+                    HKCU {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
+                    HKU {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
+                    USER {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
+                    default {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
+                }
 
-            #https://www.motobit.com/help/RegEdit/cl72.htm
-            Switch($Type){
-                0 {$RegType = 'NONE'}
-                1 {$RegType = 'SZ'}
-                2 {$RegType = 'EXPAND_SZ'}
-                3 {$RegType = 'BINARY'}
-                4 {$RegType = 'DWord'}
-                5 {$RegType = 'DWord_BIG_ENDIAN'}
-                6 {$RegType = 'LINK'}
-                7 {$RegType = 'SZ'}
-            }
-    
-            Write-host "   Adding Registry: $RegProperty\$RegKeyPath\$RegName" -ForegroundColor DarkGray
-            $lgpoout += "$LGPOHive`r`n"
-            $lgpoout += "$RegKeyPath`r`n"
-            $lgpoout += "$Name`r`n"
-            $lgpoout += "$($RegType):$Value`r`n"
-            $lgpoout += "`r`n"
+                #https://www.motobit.com/help/RegEdit/cl72.htm
+                <#Switch($Type){
+                    0 {$RegType = 'NONE'}
+                    1 {$RegType = 'SZ'}
+                    2 {$RegType = 'EXPAND_SZ'}
+                    3 {$RegType = 'BINARY'}
+                    4 {$RegType = 'DWord'}
+                    5 {$RegType = 'DWord_BIG_ENDIAN'}
+                    6 {$RegType = 'LINK'}
+                    7 {$RegType = 'SZ'}
+                }
+                #>
+                Switch($Type){
+                    'None' {$RegType = 'NONE'}
+                    'String' {$RegType = 'SZ'}
+                    'ExpandString' {$RegType = 'EXPAND_SZ'}
+                    'Binary' {$RegType = 'BINARY'}
+                    'DWord' {$RegType = 'DWORD'}
+                    'QWord' {$RegType = 'DWORD_BIG_ENDIAN'}
+                    'MultiString' {$RegType = 'LINK'}
+                    default {$RegType = 'DWORD'}
+                }
+                # build a unique output file
+                $LGPOfile = ($RegKeyHive + '-' + $RegKeyPath.replace('\','-').replace(' ','') + '-' + $RegKeyName.replace(' ','') + '.lgpo')
             
+                #complete LGPO file
+                Write-Verbose ("LGPO applying [{3}] to registry: [{0}\{1}\{2}] as a Group Policy item" -f $RegProperty,$RegKeyPath,$RegKeyName,$RegKeyName)
+                $lgpoout += "$LGPOHive`r`n"
+                $lgpoout += "$RegKeyPath`r`n"
+                $lgpoout += "$RegKeyName`r`n"
+                $lgpoout += "$($RegType):$Value`r`n"
+                $lgpoout += "`r`n"
+                $lgpoout | Out-File "$env:Temp\$LGPOfile"
 
-            $lgpoout | Out-File "$env:Temp\$RegName.lgpo"
-
-            $result = Start-Process $LGPOExe -ArgumentList "/t ""$env:Temp\$($GPO.name).lgpo""" -RedirectStandardError "$workingLogPath\$($GPO.name).lgpo.stderr.log" -Wait -NoNewWindow -PassThru
+                Write-Verbose "Start-Process $LGPOExe -ArgumentList '/t $env:Temp\$LGPOfile' -RedirectStandardError '$env:Temp\$LGPOfile.stderr.log'"
+                $result = Start-Process $LGPOExe -ArgumentList "/t $env:Temp\$LGPOfile /v" -RedirectStandardError "$env:Temp\$LGPOfile.stderr.log" -Wait -NoNewWindow -PassThru
+            }
+            Else{
+                Write-Verbose ("LGPO will not be used. Path not found: {0}" -f $LGPOExe)
+            }
         }
     }
     End {
         If(!$result -or $result.ExitCode -ne 0){
-            If(Test-Path $RegPath\$Name){
-                Set-ItemProperty $RegPath -Name $Name -Value $Value -Type $Type -Force | Out-Null | Out-Null     
+            Write-Host ("LGPO failed to run. exit code: {0}. Hardcoding registry keys...." -f $result.ExitCode) -ForegroundColor Gray
+            If(Test-Path ($RegProperty +'\'+ $RegKeyPath)){
+                Configure-RegistryItem -Path ($RegProperty +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Type $Type -Force:$Force    
             }
             Else{
-                New-ItemProperty -Path $RegPath -Name $Name -PropertyType DWord -Value $Value -Force | Out-Null | Out-Null 
+                New-Item -Path ($RegProperty +'\'+ $RegKeyPath) -Name $RegKeyName -Force:$Force | Out-Null
+                Configure-RegistryItem -Path ($RegProperty +'\'+ $RegKeyPath) -Name $RegKeyName -Type DWord -Value $Value -Force:$Force
+                Configure-RegistryItem -Path ($RegProperty +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Type $Type -Force:$Force
             }
+        }
+        Else{
+            Write-Verbose  ("LGPO ran successfully. Exit code: {0}" -f $result.ExitCode)
+        }
+
+        If(Test-Path "$env:Temp\$LGPOfile"){
+               Remove-Item "$env:Temp\$LGPOfile" -Force
+               #Remove-Item "$env:Temp" -Include "$LGPOfile*" -Recurse -Force
         }
     }
 
@@ -205,7 +310,7 @@ If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostI
 
 #Create Paths
 $ToolsPath = Join-Path $scriptDirectory -ChildPath Tools
-
+$AdditionalScriptsPath = Join-Path $scriptDirectory -ChildPath Scripts
 
 $UserProfiles = @()
 # Get each user profile SID and Path to the profile
@@ -234,8 +339,8 @@ $LogFilePath = Join-Path -Path $LogPath -ChildPath $FileName
 
 
 # DEFAULTS: Configurations are hardcoded here (change values if needed)
-[boolean]$LGPOForConfigs = $false
-[string]$LGPOPath = ''
+[boolean]$Global:LGPOForConfigs = $true
+[string]$Global:LGPOPath = "$ToolsPath\LGPO\LGPO.exe"
 [ValidateSet('Custom','High Performance','Balanced')]$SetPowerCFG = 'Custom'
 [string]$PowerCFGFilePath = "AlwaysOnPowerScheme.pow"
 [boolean]$EnablePSLogging = $false
@@ -282,12 +387,14 @@ $LogFilePath = Join-Path -Path $LogPath -ChildPath $FileName
 [boolean]$EnableSecureLogonCtrlAltDelete = $false
 [boolean]$HideDrivesWithNoMedia = $false
 [boolean]$DisableAllNotifications = $false
+[boolean]$InstallPSModules = $false
+[psobject]$InstallModulesPath = Get-ChildItem "$PSscriptRoot\PSModules" -Filter *.psm1 -Recurse
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
     # Configurations comes from Tasksequence
-    If($tsenv:CFG_UseLGPOForConfigs){[boolean]$LGPOForConfigs = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
-    If($tsenv:LGPOPath){[string]$LGPOPath = $tsenv.Value("LGPOPath")}
+    If($tsenv:CFG_UseLGPOForConfigs){[boolean]$Global:LGPOForConfigs = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
+    If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
     If($tsenv:CFG_SetPowerCFG){[boolean]$SetPowerCFG = [boolean]::Parse($tsenv.Value("CFG_SetPowerCFG"))}
     If($tsenv:CFG_PowerCFGFilePath){[string]$PowerCFGFilePath = $tsenv.Value("CFG_PowerCFGFilePath")}
     If($tsenv:CFG_EnablePSLoggingg){[boolean]$EnablePSLogging = [boolean]::Parse($tsenv.Value("CFG_EnablePSLogging"))}
@@ -333,15 +440,33 @@ If($tsenv){
     If($tsenv:CFG_EnableSecureLogon){[boolean]$EnableSecureLogonCtrlAltDelete = [boolean]::Parse($tsenv.Value("CFG_EnableSecureLogon"))}
     If($tsenv:CFG_HideDrives){[boolean]$HideDrivesWithNoMedia = [boolean]::Parse($tsenv.Value("CFG_HideDrives"))}
     If($tsenv:CFG_DisableAllNotifications){[boolean]$DisableAllNotifications = [boolean]::Parse($tsenv.Value("CFG_DisableAllNotifications"))}
+    If($tsenv:CFG_InstallPSModules){[boolean]$InstallPSModules = [boolean]::Parse($tsenv.Value("CFG_InstallPSModules"))}
+
 }
 
-##*===========================================================================
-##* MAIN
-##*===========================================================================
+
+#$VerbosePreference = 'SilentlyContinue'
+$VerbosePreference = 'Continue'
+
+
 $OneNotePathx86 = Get-ChildItem "${env:ProgramFiles(x86)}" -Recurse -Filter "ONENOTE.EXE"
 $OneNotePathx64 = Get-ChildItem "$env:ProgramFiles" -Recurse -Filter "ONENOTE.EXE"
 If($OneNotePathx86){$OneNotePath = $OneNotePathx86}
 If($OneNotePathx64){$OneNotePath = $OneNotePathx64}
+
+##*===========================================================================
+##* MAIN
+##*===========================================================================
+If ($InstallPSModules)
+{
+    If($InstallModulesPath.count -gt 0){
+        Write-LogEntry "Installing PowerShell Modules:" -Severity 1 -Outhost
+        Foreach($module in $InstallModulesPath){
+           Import-Module -name $module.FullName -Global -NoClobber -Force -Verbose -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+}
 
 If ($EnableOfficeOneNote -and $OneNotePath)
 {
@@ -349,33 +474,33 @@ If ($EnableOfficeOneNote -and $OneNotePath)
 	Write-LogEntry "Setting OneNote file association to the desktop app." -Severity 1 -Outhost
 	New-PSDrive -Name "HKCR" -PSProvider "Registry" -Root "HKEY_CLASSES_ROOT" | Out-Null
 	New-Item -Path 'Registry::HKCR\onenote-cmd\Shell\Open' -Name 'Command' -Force | Out-Null
-    New-ItemProperty -Path "Registry::HKCR\onenote-cmd\Shell\Open\Command" -Name "@" -PropertyType String -Value $OneNotePath.FullName -Force | Out-Null
+    New-ItemProperty -Path "Registry::HKCR\onenote-cmd\Shell\Open\Command" -Name "@" -Type String -Value $OneNotePath.FullName -Force | Out-Null
 	Remove-PSDrive -Name "HKCR" | Out-Null
 }
 
 If($EnablePSLogging)
 {
     Write-LogEntry ("Enabling Powershell Script Block Logging") -Severity 1 -Outhost
-    New-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell" -name ScriptBlockLogging -Force | Out-Null
-    New-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -PropertyType DWord -Value 1 -Force | Out-Null
+    #New-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell" -Name ScriptBlockLogging -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Type DWord -Value 1 -Force | Out-Null
 
     Write-LogEntry ("Enabling Powershell Transcription Logging") -Severity 1 -Outhost
-    New-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell" -name Transcription -Force | Out-Null
-    New-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -PropertyType DWord -Value 1 -Force | Out-Null
-    New-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableInvocationHeader" -PropertyType DWord -Value 1 -Force | Out-Null
-    New-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "OutputDirectory" -Value "" -Force | Out-Null
+    #New-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell" -name Transcription -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -Type DWord -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableInvocationHeader" -Type DWord -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "OutputDirectory" -Value "" -Force | Out-Null
 
     Write-LogEntry ("Enabling Powershell Module Logging Logging") -Severity 1 -Outhost
-    New-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell" -name ModuleLogging -Force | Out-Null
-    New-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -PropertyType DWord -Value 1  -Force | Out-Null
-    #New-ItemProperty -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "ModuleNames" -Value "" -Force | Out-Null
+    #New-Item -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell" -name ModuleLogging -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -Type DWord -Value 1 -Force | Out-Null
+    #Configure-RegistryItem -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "ModuleNames" -Value "" -Force | Out-Null
 }
 
 If ($EnableSystemVerboseMsg -or $EnableVDIOptimizations)
 {
     #https://support.microsoft.com/en-us/help/325376/how-to-enable-verbose-startup-shutdown-logon-and-logoff-status-message
     Write-LogEntry ("Setting Windows Startup to Verbose messages") -Severity 1 -Outhost
-    New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "VerboseStatus" -PropertyType DWord -Value 1  -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "VerboseStatus" -Type DWord -Value 1 -Force | Out-Null
     If(Test-Path ('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\DisableStatusMessages') ){
         Remove-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name 'DisableStatusMessages' -Force | Out-Null
     }
@@ -421,32 +546,28 @@ If ($SetPowerCFG -eq 'Balanced' -and !$EnableVDIOptimizations)
 If($HideDrivesWithNoMedia)
 {
     Write-LogEntry "Hiding Drives With NoMedia..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideDrivesWithNoMedia' -PropertyType DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideDrivesWithNoMedia' -Type DWord -Value '1' -Force | Out-Null
 }
 
 If ($DisableAutoRun)
 {
-    $LocalMachinePath ='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
-    $DefaultUsersPath = "Registry::HKEY_USERS\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
-    $CurrentUserPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
-
     Write-LogEntry "Disabling Autorun for local machine..." -Severity 1 -Outhost
-    Set-ItemProperty $LocalMachinePath -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
-    Set-ItemProperty $LocalMachinePath -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
-    Set-ItemProperty $LocalMachinePath -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
 
-    Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\IniFileMapping\Autorun.inf' -Name '(Default)' -Value "@SYS:DoesNotExist" -Force | Out-Null
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\Cdrom' -Name AutoRun -Type DWord -Value 0 -Force | Out-Null
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\IniFileMapping\Autorun.inf' -Name '(Default)' -Value "@SYS:DoesNotExist" -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Cdrom' -Name AutoRun -Type DWord -Value 0 -Force | Out-Null
 
     Write-LogEntry "Disabling Autorun for default users..." -Severity 1 -Outhost
-    Set-ItemProperty $DefaultUsersPath -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
-    Set-ItemProperty $DefaultUsersPath -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
-    Set-ItemProperty $DefaultUsersPath -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
+    Set-ItemProperty -Path "Registry::HKEY_USERS\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
+    Set-ItemProperty -Path "Registry::HKEY_USERS\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
+    Set-ItemProperty -Path "Registry::HKEY_USERS\.DEFAULT\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
 
     Write-LogEntry ("Disabling Autorun for Current user: {0}..." -f $env:USERNAME) -Severity 1 -Outhost
-    Set-ItemProperty $CurrentUserPath -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
-    Set-ItemProperty $CurrentUserPath -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
-    Set-ItemProperty $CurrentUserPath -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
+    Configure-RegistryItem -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
+    Configure-RegistryItem -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
 
     # Loop through each profile on the machine</p>
     Foreach ($UserProfile in $UserProfiles) {
@@ -458,10 +579,10 @@ If ($DisableAutoRun)
             $settingspath = "Registry::HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
             
             Write-Host ("Disabling Autorun on SID: {0}" -f $UserProfile.SID)
-            New-Item -Path $settingspath -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty $settingspath -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
-            Set-ItemProperty $settingspath -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
-            Set-ItemProperty $settingspath -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
+            #New-Item -Path $settingspath -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path $settingspath -Name HonorAutorunSetting -Type DWord -Value 1 -Force | Out-Null
+            Set-ItemProperty -Path $settingspath -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force | Out-Null
+            Set-ItemProperty -Path $settingspath -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force | Out-Null
         }
 
         # Unload NTuser.dat        
@@ -478,47 +599,47 @@ If ($DisableAutoRun)
 If ($ApplySTIGItems)
 {
     Write-LogEntry "Stig Item: Disabling Winlogon's Auto Restart Shell..." -Severity 1 -Outhost
-    Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'AutoRestartShell' -Value 0 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'AutoRestartShell' -Value 0 -Force | Out-Null
 
 	Write-LogEntry "Stig Item: Disabling Session Kernel Exception Chain Validation..." -Severity 1 -Outhost
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel' -Name 'DisableExceptionChainValidation' -Value 0 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel' -Name 'DisableExceptionChainValidation' -Value 0 -Force | Out-Null
 
 	Write-LogEntry "Stig Item: Clearing Session Subsystem's..." -Severity 1 -Outhost
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems' -Name 'Optional' -Type MultiString -Value "" -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems' -Name 'Optional' -Type MultiString -Value "" -Force | Out-Null
 
     Write-LogEntry "Stig Item: Disabling File System's 8.3 Name Creation..." -Severity 1 -Outhost
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'NtfsDisable8dot3NameCreation' -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'NtfsDisable8dot3NameCreation' -Value 1 -Force | Out-Null
 
     Write-LogEntry "Stig Item: Disabling RASMAN PPP Parameters..." -Severity 1 -Outhost
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'DisableSavePassword' -Value 1 -Force | Out-Null
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'Logging' -Value 1 -Force | Out-Null
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'ForceEncryptedData' -Value 1 -Force | Out-Null
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'ForceEncryptedPassword' -Value 2 -Force | Out-Null
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'SecureVPN' -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'DisableSavePassword' -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'Logging' -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'ForceEncryptedData' -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'ForceEncryptedPassword' -Value 2 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'SecureVPN' -Value 1 -Force | Out-Null
 }
 
 If ($EnableRDP)
 {
 	Write-LogEntry "Enabling RDP..." -Severity 1 -Outhost
-	Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0 | Out-Null
-	Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1 | Out-Null
+	Configure-RegistryItem -Path -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0 | Out-Null
+	Configure-RegistryItem -Path -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1 | Out-Null
 	Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 }
 
 If ($DisableOneDrive)
 {
 	Write-LogEntry "Turning off OneDrive..." -Severity 1 -Outhost
-    New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows' -Name 'OneDrive' -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisableFileSyncNGSC' -PropertyType DWord -Value '1' -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'PreventNetworkTrafficPreUserSignIn' -PropertyType DWord -Value '1' -Force | Out-Null
-    Set-ItemProperty -Path 'Registry::HKCR\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}\ShellFolder' -Name Attributes -Type DWord -Value 0 -ErrorAction SilentlyContinue -Force | Out-Null
+    ##New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows' -Name 'OneDrive' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisableFileSyncNGSC' -Type DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'PreventNetworkTrafficPreUserSignIn' -Type DWord -Value '1' -Force | Out-Null
+    Configure-RegistryItem -Path -Path 'Registry::HKCR\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}\ShellFolder' -Name Attributes -Type DWord -Value 0 -ErrorAction SilentlyContinue -Force | Out-Null
 }
 
 If ($PreferIPv4OverIPv6)
 {
 	# Use 0x20 to prefer IPv4 over IPv6 by changing entries in the prefix policy table. 
 	Write-LogEntry "Modifying IPv6 bindings to prefer IPv4 over IPv6..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisabledComponents' -PropertyType DWord -Value '32' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisabledComponents' -Type DWord -Value '32' -Force | Out-Null
 }
 
 If($DisableAllNotifications)
@@ -555,8 +676,8 @@ If($DisableAllNotifications)
             $settingspath = "Registry::HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Notifications\Settings"
             Foreach ($key in $notifications.GetEnumerator()){
                 Write-Host ("{0} on SID: {1}" -f $key.Key,$UserProfile.SID)
-                New-Item -Path ($settingspath + "\" + $key.Value) -ErrorAction SilentlyContinue | Out-Null
-                New-ItemProperty -Path ($settingspath + "\" + $key.Value) -Name Enabled -Value 0 -PropertyType DWord -ErrorAction SilentlyContinue | Out-Null
+                #New-Item -Path ($settingspath + "\" + $key.Value) -ErrorAction SilentlyContinue | Out-Null
+                Configure-RegistryItem -Path ($settingspath + "\" + $key.Value) -Name Enabled -Value 0 -Type DWord -ErrorAction SilentlyContinue | Out-Null
             }
         }
 
@@ -579,9 +700,9 @@ If ($DisabledIEFirstRunWizard)
     }
 	# Disable IE First Run Wizard
 	Write-LogEntry "Disabling IE First Run Wizard for SYSTEM..." -Severity 1 -Outhost
-	New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft' -Name 'Internet Explorer' -Force | Out-Null
-	New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer' -Name 'Main' -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main' -Name DisableFirstRunCustomize -PropertyType DWord -Value '1' -Force | Out-Null
+	##New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft' -Name 'Internet Explorer' -Force | Out-Null
+	##New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer' -Name 'Main' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main' -Name DisableFirstRunCustomize -Type DWord -Value '1' -Force | Out-Null
 
     # Loop through each profile on the machine</p>
     Foreach ($UserProfile in $UserProfiles) {
@@ -593,8 +714,8 @@ If ($DisabledIEFirstRunWizard)
             $settingspath = "Registry::HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Internet Explorer\Main"
             Foreach ($key in $notifications.GetEnumerator()){
                 Write-Host ("{0} on SID: {1}" -f $key.Key,$UserProfile.SID)
-                New-Item -Path ($settingspath + "\" + $key.Value) -ErrorAction SilentlyContinue | Out-Null
-                New-ItemProperty -Path ($settingspath + "\" + $key.Value) -Name Enabled -Value 0 -PropertyType DWord -ErrorAction SilentlyContinue | Out-Null
+                ##New-Item -Path ($settingspath + "\" + $key.Value) -ErrorAction SilentlyContinue | Out-Null
+                Configure-RegistryItem -Path ($settingspath + "\" + $key.Value) -Name Enabled -Value 0 -Type DWord -ErrorAction SilentlyContinue | Out-Null
             }
         }
 
@@ -612,33 +733,33 @@ If ($DisableWMPFirstRunWizard)
 {
 	# Disable IE First Run Wizard
 	Write-LogEntry "Disabling Media Player First Run Wizard..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\Software\Microsoft\MediaPlayer\Preferences' -Name AcceptedEULA -PropertyType DWord -Value '1' -Force | Out-Null
-    New-ItemProperty -Path 'HKLM:\Software\Microsoft\MediaPlayer\Preferences' -Name FirstTime -PropertyType DWord -Value '1' -Force | Out-Null
-    New-ItemProperty -Path 'HKLM:\Software\Policies\Microsoft\WindowsMediaPlayer' -Name GroupPrivacyAcceptance -PropertyType DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\MediaPlayer\Preferences' -Name AcceptedEULA -Type DWord -Value '1' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\MediaPlayer\Preferences' -Name FirstTime -Type DWord -Value '1' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Policies\Microsoft\WindowsMediaPlayer' -Name GroupPrivacyAcceptance -Type DWord -Value '1' -Force | Out-Null
 }
 
 If($EnableSecureLogonCtrlAltDelete)
 {
   	# Disable IE First Run Wizard
 	Write-LogEntry "Enabled Secure Logon Screen Settings..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name DisableCAD -PropertyType DWord -Value '0' -Force | Out-Null
-    New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name DontDisplayLastUserName -PropertyType DWord -Value '1' -Force | Out-Null
-    New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name BlockDomainPicturePassword -PropertyType DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name DisableCAD -Type DWord -Value '0' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name DontDisplayLastUserName -Type DWord -Value '1' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name BlockDomainPicturePassword -Type DWord -Value '1' -Force | Out-Null
 }
 
 If ($DisableEdgeIconCreation)
 {
 	Write-LogEntry "Disabling Microsoft Edge desktop icon creation..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name 'Explorer' -PropertyType DWord -Value '1' -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name 'DisableEdgeDesktopShortcutCreation' -PropertyType DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name 'Explorer' -Type DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name 'DisableEdgeDesktopShortcutCreation' -Type DWord -Value '1' -Force | Out-Null
 }
 
 # Disable New Network dialog box
 If ($DisableNewNetworkDialog)
 {
 	Write-LogEntry "Disabling New Network Dialog..." -Severity 1 -Outhost
-	New-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Network' -Name 'NewNetworkWindowOff' -Force | Out-Null
-    New-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet' -Name 'EnableActiveProbing' -PropertyType DWord -Value '0' -Force | Out-Null
+	##New-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Network' -Name 'NewNetworkWindowOff' -Force | Out-Null
+    Configure-RegistryItem 'HKLM:\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet' -Name 'EnableActiveProbing' -Type DWord -Value '0' -Force | Out-Null
 }
 
 If($RemoveActiveSetupComponents -or $EnableVDIOptimizations){
@@ -890,24 +1011,24 @@ If ($DisableCortana)
 {
     # Disable Cortana
 	Write-LogEntry "Disabling Cortana..." -Severity 1 -Outhost
-	New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\' -Name 'Windows Search' -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -PropertyType DWord -Value '0' -Force | Out-Null
+	#New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\' -Name 'Windows Search' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -Type DWord -Value '0' -Force | Out-Null
 }
 
 If ($DisableInternetSearch)
 {
 	# Configure Search Options:
 	Write-LogEntry "Configuring Search Options..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowSearchToUseLocation' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowSearchToUseLocation' -Type DWord -Value '0' -Force | Out-Null
 	# Disallow search and Cortana to use location
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'ConnectedSearchUseWeb' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'ConnectedSearchUseWeb' -Type DWord -Value '0' -Force | Out-Null
     # Disable cortona option in taskbar
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'SearchboxTaskbarMode' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'SearchboxTaskbarMode' -Type DWord -Value '0' -Force | Out-Null
 	
     # Do not allow web search
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'DisableWebSearch' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'DisableWebSearch' -Type DWord -Value '0' -Force | Out-Null
     # Do not allow Cortona to use web search with bing
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'BingSearchEnabled' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'BingSearchEnabled' -Type DWord -Value '0' -Force | Out-Null
 }
 
 
@@ -916,66 +1037,66 @@ If ($DisableInternetSearch)
 If ($ApplyPrivacyMitigations)
 {
 	Write-LogEntry "Disallowing the user to change sign-in options..." -Severity 1 -Outhost
-	New-Item -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device" -Name "Settings" -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowSignInOptions' -PropertyType DWord -Value '0' -Force | Out-Null
+	#New-Item -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device" -Name "Settings" -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowSignInOptions' -Type DWord -Value '0' -Force | Out-Null
 	
 	# Disable the Azure AD Sign In button in the settings app
 	Write-LogEntry "Disabling Azure AD sign-in options..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowWorkplace' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowWorkplace' -Type DWord -Value '0' -Force | Out-Null
 	
 	Write-LogEntry "Disabling the Microsoft Account Sign-In Assistant..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'NoConnectedUser' -PropertyType DWord -Value '3' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'NoConnectedUser' -Type DWord -Value '3' -Force | Out-Null
 	
 	# Disable the MSA Sign In button in the settings app
 	Write-LogEntry "Disabling MSA sign-in options..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowYourAccount' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowYourAccount' -Type DWord -Value '0' -Force | Out-Null
 	
 	Write-LogEntry "Disabling camera usage on user's lock screen..." -Severity 1 -Outhost
-	New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "Personalization" -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenCamera' -PropertyType DWord -Value '1' -Force | Out-Null
+	#New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "Personalization" -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenCamera' -Type DWord -Value '1' -Force | Out-Null
 	
 	Write-LogEntry "Disabling lock screen slideshow..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenSlideshow' -PropertyType DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenSlideshow' -Type DWord -Value '1' -Force | Out-Null
 	
 	# Offline maps
 	Write-LogEntry "Turning off unsolicited network traffic on the Offline Maps settings page..." -Severity 1 -Outhost
-    New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "Maps" -Force | Out-Null	
-    New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AllowUntriggeredNetworkTrafficOnSettingsPage' -PropertyType DWord -Value '0' -Force | Out-Null
+    #New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "Maps" -Force | Out-Null	
+    Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AllowUntriggeredNetworkTrafficOnSettingsPage' -Type DWord -Value '0' -Force | Out-Null
 	Write-LogEntry "Turning off Automatic Download and Update of Map Data..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AutoDownloadAndUpdateMapData' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AutoDownloadAndUpdateMapData' -Type DWord -Value '0' -Force | Out-Null
 	
 	# Microsoft Edge
 	Write-LogEntry "Enabling Do Not Track in Microsoft Edge..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'DoNotTrack' -PropertyType DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'DoNotTrack' -Type DWord -Value '1' -Force | Out-Null
 	
 	Write-LogEntry "Disallow web content on New Tab page in Microsoft Edge..." -Severity 1 -Outhost
-    New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge" -Name "SearchScopes" -Force | Out-Null	
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\SearchScopes' -Name 'AllowWebContentOnNewTabPage' -PropertyType DWord -Value '0' -Force | Out-Null
+    #New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge" -Name "SearchScopes" -Force | Out-Null	
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\SearchScopes' -Name 'AllowWebContentOnNewTabPage' -Type DWord -Value '0' -Force | Out-Null
 	
 	# General stuff
 	Write-LogEntry "Turning off the advertising ID..." -Severity 1 -Outhost
-	New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion" -Name "AdvertisingInfo" -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -PropertyType DWord -Value '0' -Force | Out-Null
+	#New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion" -Name "AdvertisingInfo" -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -Type DWord -Value '0' -Force | Out-Null
 	
 	Write-LogEntry "Turning off location..." -Severity 1 -Outhost
-    New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "AppPrivacy" -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessLocation' -PropertyType DWord -Value '0' -Force | Out-Null
-	New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "LocationAndSensors" -Force | Out-Null
-    New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors' -Name 'DisableLocation' -PropertyType DWord -Value '0' -Force | Out-Null
+    #New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "AppPrivacy" -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessLocation' -Type DWord -Value '0' -Force | Out-Null
+	#New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows" -Name "LocationAndSensors" -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors' -Name 'DisableLocation' -Type DWord -Value '0' -Force | Out-Null
 	
 	# Stop getting to know me
 	Write-LogEntry "Turning off automatic learning..." -Severity 1 -Outhost
-    New-Item -Path "HKLM:\Software\Policies\Microsoft" -Name "InputPersonalization" -Force | Out-Null	
-    New-ItemProperty -Path 'HKLM:\Software\Policies\Microsoft\InputPersonalization' -Name 'RestrictImplicitInkCollection' -PropertyType DWord -Value '1' -Force | Out-Null
+    #New-Item -Path "HKLM:\Software\Policies\Microsoft" -Name "InputPersonalization" -Force | Out-Null	
+    Configure-RegistryItem -Path 'HKLM:\Software\Policies\Microsoft\InputPersonalization' -Name 'RestrictImplicitInkCollection' -Type DWord -Value '1' -Force | Out-Null
 	# Turn off updates to the speech recognition and speech synthesis models
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Speech_OneCore\Preferences' -Name 'ModelDownloadAllowed' -PropertyType DWord -Value '0' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Speech_OneCore\Preferences' -Name 'ModelDownloadAllowed' -Type DWord -Value '0' -Force | Out-Null
 	
 	Write-LogEntry "Disallowing Windows apps to access account information..." -Severity 1 -Outhost
-	New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows" -Name "AppPrivacy" -Force | Out-Null
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessAccountInfo' -PropertyType DWord -Value '2' -Force | Out-Null
+	#New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows" -Name "AppPrivacy" -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessAccountInfo' -Type DWord -Value '2' -Force | Out-Null
 	
 	Write-LogEntry "Disabling all feedback notifications..." -Severity 1 -Outhost
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -PropertyType DWord -Value '1' -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value '1' -Force | Out-Null
 	
 	Write-LogEntry "Disabling telemetry..."
 	$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
@@ -990,7 +1111,7 @@ If ($ApplyPrivacyMitigations)
 		$TelemetryLevel = "1"
 		Write-LogEntry "Lowest supported telemetry level: Basic." -Severity 1 -Outhost
 	}
-	New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -PropertyType DWord -Value $TelemetryLevel -Force | Out-Null
+	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force | Out-Null
 }
 
 
@@ -1042,24 +1163,24 @@ If ($EnableWinRM)
 If ($EnableAppsRunAsAdmin -or $DisableUAC)
 {
     Write-LogEntry "Enabling Apps to run as Administrator..." -Severity 1 -Outhost
-    New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name FilterAdministratorToken -PropertyType DWord -Value '1' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name FilterAdministratorToken -Type DWord -Value '1' -Force | Out-Null
 }
 
 If ($DisableUAC)
 {
     Write-LogEntry "Disabling User Access Control..." -Severity 1 -Outhost
-    New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -PropertyType DWord -Value '0' -Force | Out-Null
-    New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -PropertyType DWord -Value '0' -Force | Out-Null
-    New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name PromptOnSecureDesktop -PropertyType DWord -Value '0' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -Type DWord -Value '0' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -Type DWord -Value '0' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name PromptOnSecureDesktop -Type DWord -Value '0' -Force | Out-Null
 }
 
 
 If ($DisableWUP2P)
 {
     Write-LogEntry "Disable P2P WIndows Updates..." -Severity 1 -Outhost
-    New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name DODownloadMode -PropertyType DWord -Value '0' -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name DODownloadMode -Type DWord -Value '0' -Force | Out-Null
     #adds windows update back to control panel (permissions ned to be changed)
-    #New-ItemProperty -Path 'HKLM:\Software\Microsoft\WindowsUpdate\UX' -Name IsConvergedUpdateStackEnabled -PropertyType DWord -Value '0' -Force | Out-Null
+    #Configure-RegistryItem -Path 'HKLM:\Software\Microsoft\WindowsUpdate\UX' -Name IsConvergedUpdateStackEnabled -Type DWord -Value '0' -Force | Out-Null
 }
 
 
@@ -1067,8 +1188,8 @@ If ( ($EnableIEEnterpriseMode) -and ($IEEMSiteListPath) )
 {
     If(Test-Path $IEEMSiteListPath){
         Write-LogEntry "Enabling Enterprise Mode option in IE..." -Severity 1 -Outhost
-        New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Enable -PropertyType DWord -Value '1' -Force | Out-Null
-        New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Sitelist -Value $IEEMSiteListPath -Force | Out-Null
+        Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Enable -Type DWord -Value '1' -Force | Out-Null
+        Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Sitelist -Value $IEEMSiteListPath -Force | Out-Null
     }
     Else{
         Write-LogEntry ("IE Enterprise XML Path [{0}] is not found..." -f $IEEMSiteListPath) -Severity 2 -Outhost
@@ -1081,7 +1202,7 @@ If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
 	Write-LogEntry "Copying Logon script to $env:windir\Scripts" -Severity 1 -Outhost
 	If (!(Test-Path "$env:windir\Scripts"))
 	{
-		New-Item "$env:windir\Scripts" -ItemType Directory
+		#New-Item "$env:windir\Scripts" -ItemType Directory
 	}
 	Copy-Item -Path $LogonScriptPath -Destination "$env:windir\Scripts\Logon.ps1" -Force | Out-Null
 	
@@ -1089,8 +1210,8 @@ If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
 	Start-Process -FilePath "reg.exe" -ArgumentList "LOAD HKLM:\DEFAULT $env:systemdrive\Users\Default\NTUSER.DAT"
 	# create RunOnce entries current / new user(s)
 	Write-LogEntry "Creating RunOnce entries..." -Severity 1 -Outhost
-	New-ItemProperty -Path "HKLM:\Default\Software\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1"
-	New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1"
+	Configure-RegistryItem -Path "HKLM:\Default\Software\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1"
+	Configure-RegistryItem -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1"
 	
     # unload default hive
 	Start-Process -FilePath "reg.exe" -ArgumentList "UNLOAD HKLM:\DEFAULT"
@@ -1098,42 +1219,46 @@ If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
 
 If($EnableCredGuard)
 {
-if ([int](Get-WmiObject -Class Win32_OperatingSystem).BuildNumber -lt 14393) {
+    if ([int](Get-WmiObject -Class Win32_OperatingSystem).BuildNumber -gt 14393) {
         try {
             # For version older than Windows 10 version 1607 (build 14939), enable required Windows Features for Credential Guard
             Enable-WindowsOptionalFeature -FeatureName Microsoft-Hyper-V-HyperVisor -Online -All -LimitAccess -NoRestart -ErrorAction Stop | Out-Null
             Write-LogEntry "Successfully enabled Microsoft-Hyper-V-HyperVisor feature" -Severity 1 -Outhost
+        }
+        catch [System.Exception] {
+            Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. Error: -f $_") -Severity 3 -Outhost
+        }
 
+        try {
             # For version older than Windows 10 version 1607 (build 14939), add the IsolatedUserMode feature as well
             Enable-WindowsOptionalFeature -FeatureName IsolatedUserMode -Online -All -LimitAccess -NoRestart -ErrorAction Stop | Out-Null
             Write-LogEntry "Successfully enabled IsolatedUserMode feature" -Severity 1 -Outhost
         }
         catch [System.Exception] {
-            Write-LogEntry "An error occured when enabling required windows features" -Severity 3 -Outhost
+            Write-LogEntry ("An error occured when enabling IsolatedUserMode. Error: -f $_") -Severity 3 -Outhost
         }
     }
     
-    # Add required registry key for Credential Guard
-    $RegistryKeyPath = "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard"
-    if (-not(Test-Path -Path $RegistryKeyPath)) {
-        Write-LogEntry "Creating HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard registry key" -Severity 1 -Outhost
-        New-Item -Path $RegistryKeyPath -ItemType Directory -Force | Out-Null
+    Write-LogEntry "Attempting to enable Deviceguard security" -Severity 1 -Outhost
+    #https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-defender-exploit-guard/enable-virtualization-based-protection-of-code-integrity
+    Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name RequirePlatformSecurityFeatures -Type DWord -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name EnableVirtualizationBasedSecurity -Type DWord -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name Locked -Type DWord -Value 0 -Force | Out-Null
+    If ([int](Get-WmiObject -Class Win32_OperatingSystem).BuildNumber -lt 14393) {
+        Configure-RegistryItem -Path "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name HypervisorEnforcedCodeIntegrity -Type DWord -Value 1 -Force | Out-Null
     }
+    Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Enabled -Type DWord -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Locked -Type DWord -Value 0 -Force | Out-Null
 
-    # Add registry value RequirePlatformSecurityFeatures - 1 for Secure Boot only, 3 for Secure Boot and DMA Protection
-    Write-LogEntry "Adding HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\RequirePlatformSecurityFeatures value as DWord with data 1" -Severity 1 -Outhost
-    New-ItemProperty -Path $RegistryKeyPath -Name RequirePlatformSecurityFeatures -PropertyType DWord -Value 1 -Force | Out-Null
-
-    # Add registry value EnableVirtualizationBasedSecurity - 1 for Enabled, 0 for Disabled
-    Write-LogEntry "Adding HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\EnableVirtualizationBasedSecurity value as DWord with data 1" -Severity 1 -Outhost
-    New-ItemProperty -Path $RegistryKeyPath -Name EnableVirtualizationBasedSecurity -PropertyType DWord -Value 1 -Force | Out-Null
-
-    # Add registry value LsaCfgFlags - 1 enables Credential Guard with UEFI lock, 2 enables Credential Guard without lock, 0 for Disabled
-    Write-LogEntry "Adding HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa\LsaCfgFlags value as DWord with data 1" -Severity 1 -Outhost
-    New-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa -Name LsaCfgFlags -PropertyType DWord -Value 1 -Force | Out-Null
-
-    # Write end of log file
-    Write-LogEntry "Successfully enabled Credential Guard" -Severity 1 -Outhost
+    Configure-RegistryItem -Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa -Name LsaCfgFlags -Type DWord -Value 1 -Force | Out-Null
+    $DeviceGuardProperty = Get-CimInstance –ClassName Win32_DeviceGuard –Namespace root\Microsoft\Windows\DeviceGuard
+    If($DeviceGuardProperty.VirtualizationBasedSecurityStatus -eq 1){
+        Write-LogEntry ("Successfully enabled Credential Guard, version: {0}" -f $DeviceGuardProperty.Version) -Severity 1 -Outhost   
+    }
+    Else{
+        Write-LogEntry "Unable to enabled Credential Guard, may not be supported on this model, trying a differnet way" -Severity 2 -Outhost
+        . $AdditionalScriptsPath\DG_Readiness_Tool_v3.6.ps1 -Enable -CG
+    }
 }
 
 
@@ -1147,7 +1272,7 @@ If ($PreCompileAssemblies -or $EnableVDIOptimizations)
 {
     #https://www.emc.com/collateral/white-papers/h14854-optimizing-windows-virtual-desktops-deploys.pdf
     #https://blogs.msdn.microsoft.com/dotnet/2012/03/20/improving-launch-performance-for-your-desktop-applications/
-    Write-LogEntry "Pre-compile .NET framework assemblies" -Severity 1 -Outhost
+    Write-LogEntry "Pre-compile .NET framework assemblies. This can take a while...." -Severity 1 -Outhost
     Start-Process "$env:windir\Microsoft.NET\Framework\v4.0.30319\ngen.exe" -ArgumentList "update /force" -Wait -NoNewWindow
     Start-Process "$env:windir\Microsoft.NET\Framework\v4.0.30319\ngen.exe" -ArgumentList "executequeueditems" -Wait -NoNewWindow
 }
@@ -1156,7 +1281,7 @@ If ($PreCompileAssemblies -or $EnableVDIOptimizations)
 If ($EnableVDIOptimizations)
 {
     Write-LogEntry "VDI Optimizations: Disabling Paging Executive..." -Severity 1 -Outhost
-    Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'DisablePagingExecutive' -Value 1 -Force | Out-Null
+    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'DisablePagingExecutive' -Value 1 -Force | Out-Null
 
     Write-LogEntry "VDI Optimizations: Disabling NTFS Last Access" -Severity 1 -Outhost
     Start-process fsutil -ArgumentList 'behavior set disablelastaccess 1 ' -Wait -NoNewWindow  | Out-Null
