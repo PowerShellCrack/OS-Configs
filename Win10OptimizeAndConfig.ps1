@@ -312,14 +312,17 @@ If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostI
 $ToolsPath = Join-Path $scriptDirectory -ChildPath Tools
 $AdditionalScriptsPath = Join-Path $scriptDirectory -ChildPath Scripts
 
-$UserProfiles = @()
 # Get each user profile SID and Path to the profile
-$UserProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
-    
+$AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
+
 # Add in the .DEFAULT User Profile
 $DefaultProfile = "" | Select-Object SID, UserHive
 $DefaultProfile.SID = ".DEFAULT"
 $DefaultProfile.Userhive = "$env:PUBLIC\NTuser.dat"
+
+#Add it to the UserProfile list
+$UserProfiles = @()
+$UserProfiles += $AllProfiles
 $UserProfiles += $DefaultProfile
 
 Try
