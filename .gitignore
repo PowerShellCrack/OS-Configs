@@ -1,0 +1,5 @@
+nuget/
+!/PSModules/
+/PSModules/*
+!/Tools/
+/Tools/*

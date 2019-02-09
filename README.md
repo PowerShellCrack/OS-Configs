@@ -7,10 +7,18 @@
  - LGPOPath=%DeployRoot%\Scripts\Custom\OS-Configs\Tools\LGPO
  
 ## Add to MDT CustomSettings.ini
-    Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_EnablePSLogging,CFG_ApplySTIGItems,CFG_DisableAutoRun,CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableVDIOptimizations,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,CFG_RemoveActiveSetupComponents,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_DisableEdgeIconCreation,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_EnableRemoteRegistry,CFG_DisableFirewall,CFG_ApplyPrivacyMitigations,CFG_EnableCredGuard,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableWinRM,CFG_EnableAppsRunAsAdmin,CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_DisableIndexing
+    
+	- Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_ApplySTIGItems,CFG_DisableAutoRun,
+	CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableVDIOptimizations,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,
+	CFG_RemoveActiveSetupComponents,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_DisableEdgeIconCreation,CFG_DisableNewNetworkDialog,
+	CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,
+	CFG_EnableRemoteRegistry,CFG_DisableFirewall,CFG_ApplyPrivacyMitigations,CFG_EnableCredGuard,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableWinRM,CFG_EnableAppsRunAsAdmin,
+	CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_EnableSecureLogon,CFG_HideDrives,CFG_DisableAllNotifications,
+	CFG_InstallPSModules,CFG_EnableVisualPerformance,CFG_EnableDarkTheme,CFG_EnableNumlockStartup,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,
+	CFG_ShowUserFolderOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,SCCMSiteServer,AppVolMgrServer,AdminMenuConfigPath,CFG_SetSmartScreenFilter,CFG_EnableStrictUAC,
+	CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades
 
-
-    '// Configuration Settings (Win10OptimizeAndConfig.ps1)
+## Configuration Settings (see CustomSettings.exmaple.ini)
     CFG_UseLGPOForConfigs=True
     CFG_SetPowerCFG=[Custom|High Performance|Balanced]
     CFG_PowerCFGFilePath=%DeployRoot%\Scripts\Custom\OS-Configs\AlwaysOnPowerScheme.pow
@@ -23,40 +31,8 @@
     CFG_DisableInternetSearch=True
     CFG_EnableVDIOptimizations=True
     CFG_EnableOfficeOneNote=True
-    CFG_EnableRDP=True
-    CFG_DisableOneDrive=True
-    CFG_PreferIPv4OverIPv6=True
-    CFG_RemoveActiveSetupComponents=True
-    CFG_DisableWindowsFirstLoginAnimation=True
-    CFG_DisableIEFirstRunWizard=True
-    CFG_DisableWMPFirstRunWizard=True
-    CFG_DisableEdgeIconCreation=True
-    CFG_DisableNewNetworkDialog=True
-    CFG_DisableInternetServices=True
-    CFG_DisabledUnusedServices=True
-    CFG_DisabledUnusedFeatures=True
-    CFG_DisableSchTasks=True
-    CFG_DisableDefender=False
-    CFG_DisableFirewall=False
-    CFG_DisableWireless=True
-    CFG_DisableBluetooth=True
-    CFG_EnableRemoteRegistry=True
-    CFG_DisableFirewall=False
-    CFG_ApplyPrivacyMitigations=True
-    CFG_InstallLogonScript=False
-    CFG_LogonScriptPath=''
-    CFG_EnableWinRM=True
-    CFG_EnableAppsRunAsAdmin=False
-    CFG_DisableUAC=False
-    CFG_DisableWUP2P=True
-    CFG_EnableIEEnterpriseMode=False
-    CFG_IEEMSiteListPath=\\%JoinDomain%\NETLOGON\IE_EM_List\SiteList.xml
-    CFG_PreCompileAssemblies=True
-    CFG_DisableIndexing=True
+    ...
 
-    '// Path to LGPO.exe
-    LGPOPath=%DeployRoot%\Scripts\Custom\OS-Configs\Tools\LGPO
 
-### Originators/Credit
 
-* [@AdmiralTolwyn](https://github.com/AdmiralTolwyn) (Anton Romanyuk)
+
