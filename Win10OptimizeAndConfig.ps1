@@ -2490,17 +2490,57 @@ If($ApplySTIGItems -or $ApplyEMETMitigations)
     }
 
     Foreach ($Mitigation in $ApplicationMitigationsDep.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigations for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DEP : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
         If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
             Set-ProcessMitigation $Mitigation.Value -enable DEP
+        }
+    }
+
+    Foreach ($Mitigation in $ApplicationMitigationsASLR_BU.GetEnumerator()){
+        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:BottomUp : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
             Set-ProcessMitigation $Mitigation.Value -enable BottomUp
+        }
+    }
+
+    Foreach ($Mitigation in $ApplicationMitigationsASLR_FRI.GetEnumerator()){
+        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:ForceRelocateImages : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
             Set-ProcessMitigation $Mitigation.Value -enable ForceRelocateImages
+        }
+    }
+
+    Foreach ($Mitigation in $ApplicationMitigationsImageLoad.GetEnumerator()){
+        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [BlockRemoteImageLoads : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+            Set-ProcessMitigation $Mitigation.Value -enable BlockRemoteImageLoads
+        }
+    }
+
+    Foreach ($Mitigation in $ApplicationMitigationsAllPayload.GetEnumerator()){
+        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation[Payload:Export & Rop* : ON] options for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
             Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilter
             Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilterPlus
             Set-ProcessMitigation $Mitigation.Value -enable EnableImportAddressFilter
             Set-ProcessMitigation $Mitigation.Value -enable EnableRopStackPivot
             Set-ProcessMitigation $Mitigation.Value -enable EnableRopCallerCheck
             Set-ProcessMitigation $Mitigation.Value -enable EnableRopSimExec
+        }
+    }
+
+    Foreach ($Mitigation in $ApplicationMitigationsPayloadROP.GetEnumerator()){
+        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [Payload:Rop* : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+            Set-ProcessMitigation $Mitigation.Value -enable EnableRopStackPivot
+            Set-ProcessMitigation $Mitigation.Value -enable EnableRopCallerCheck
+            Set-ProcessMitigation $Mitigation.Value -enable EnableRopSimExec
+        }
+    }
+
+    Foreach ($Mitigation in $ApplicationMitigationsChild.GetEnumerator()){
+        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DisallowChildProcessCreation : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
             Set-ProcessMitigation $Mitigation.Value -enable DisallowChildProcessCreation
         }
     }
