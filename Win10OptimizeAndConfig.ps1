@@ -8,7 +8,7 @@
      Thanks to:                 unixuser011,W4RH4WK
 	===========================================================================
 	.DESCRIPTION
-		Applies Windows 10 Optimazations and configurations. Supports VDI optmizations
+		Applies Windows 10 Optimizations and configurations. Supports VDI optmizations
         Utilizes LGPO.exe to apply group policy item where neceassary. 
         Utilizes MDT/SCCM TaskSequence variables:
            _SMSTSLogPath
@@ -486,6 +486,7 @@ If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostI
 [string]$scriptDirectory = Split-Path $MyInvocation.MyCommand.Path -Parent
 [string]$scriptName = Split-Path $MyInvocation.MyCommand.Path -Leaf
 [string]$scriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($scriptName)
+[int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
 
 #Create Paths
 $ToolsPath = Join-Path $scriptDirectory -ChildPath 'Tools'
@@ -736,15 +737,24 @@ If($DisableActionCenter){
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\ImmersiveShell" -Name "UseActionCenterExperience" -Type DWord -Value 0 -Force | Out-Null
 }
 
+
 If($DisableFeedback){
     # Loop through each profile on the machine
     Foreach ($UserProfile in $UserProfiles) {
-        
+        If($UserProfile.SID -ne ".DEFAULT"){
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount])
+        }
+        Else{
+            $UserID = $UserProfile.SID
+        }
+
         # Load User ntuser.dat if it's not already loaded
         If (($ProfileWasLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
             # Manipulate the registry
-            Write-LogEntry ("Disabling Feedback Notifications on SID: {0}..." -f $UserProfile.SID) -Severity 1 -Outhost
+            
+            Write-LogEntry ("Disabling Feedback Notifications on User: {0}..." -f $UserID) -Severity 1 -Outhost
             $settingspath = "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Siuf\Rules"
             Set-ItemProperty -Path $settingspath -Name NumberOfSIUFInPeriod -Type DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path $settingspath -Name PeriodInNanoSeconds -Type DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
@@ -760,16 +770,19 @@ If($DisableFeedback){
 
 }
 
+
 If($DisableWindowsUpgrades){
     Write-LogEntry "Disabling Windows Upgrades from Windows Updates..." -Severity 1 -Outhost
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Gwx" -Name "DisableGwx" -Type DWord -Value 1 -Force | Out-Null
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" -Name "DisableOSUpgrade" -Type DWord -Value 1 -Force | Out-Null
 }
 
+
 If($DisableStoreOnTaskbar){
     Write-LogEntry "Disabling Pinning of Microsoft Store app on the taskbar..." -Severity 1 -Outhost
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "NoPinningStoreToTaskbar" -Type DWord -Value 1 -Force | Out-Null
 }
+
 
 If ($EnableOfficeOneNote -and $OneNotePath)
 {
@@ -780,6 +793,7 @@ If ($EnableOfficeOneNote -and $OneNotePath)
     New-ItemProperty -Path "Registry::HKCR\onenote-cmd\Shell\Open\Command" -Name "@" -Type String -Value $OneNotePath.FullName -Force | Out-Null
 	Remove-PSDrive -Name "HKCR" | Out-Null
 }
+
 
 If($ApplySTIGItems -or $EnablePSLogging)
 {
@@ -798,6 +812,7 @@ If($ApplySTIGItems -or $EnablePSLogging)
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -Type DWord -Value 1 -Force | Out-Null
     #Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "ModuleNames" -Value "" -Force | Out-Null
 }
+
 
 If ($EnableSystemVerboseMsg)
 {
@@ -827,12 +842,14 @@ If ($SetPowerCFG -eq 'High Performance' -or $OptimizeForVDI)
 	Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Type DWord -Value 0 -Force | Out-Null
 }
 
+
 If ($SetPowerCFG -eq 'Balanced')
 {
     #Set Balanced to Default
     Write-LogEntry ("Setting Power configurations to [{0}]..."  -f $SetPowerCFG) -Severity 1 -Outhost
     Set-PowerPlan -PreferredPlan $SetPowerCFG -ACTimeout 0 -Hibernate Off
 }
+
 
 If (($SetPowerCFG -eq 'Custom') -and (Test-Path $PowerCFGFilePath) -and !$OptimizeForVDI)
 {
@@ -851,6 +868,7 @@ If($HideDrivesWithNoMedia)
     Write-LogEntry "Hiding Drives With NoMedia..." -Severity 1 -Outhost
 	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideDrivesWithNoMedia' -Type DWord -Value '1' -Force | Out-Null
 }
+
 
 If ($ApplySTIGItems -or $DisableAutoRun)
 {
@@ -887,14 +905,21 @@ If ($ApplySTIGItems -or $DisableAutoRun)
 
     # Loop through each profile on the machine
     Foreach ($UserProfile in $UserProfiles) {
-        
+        If($UserProfile.SID -ne ".DEFAULT"){
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount])
+        }
+        Else{
+            $UserID = $UserProfile.SID
+        }
+
         # Load User ntuser.dat if it's not already loaded
         If (($ProfileWasLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
             # Manipulate the registry
             $settingspath = "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
             
-            Write-LogEntry ("Disabling Autorun on SID: {0}..." -f $UserProfile.SID) -Outhost
+            Write-LogEntry ("Disabling Autorun on User: {0}..." -f $UserID) -Outhost
             #New-Item -Path $settingspath -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path $settingspath -Name HonorAutorunSetting -Type DWord -Value 1 -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path $settingspath -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force -ErrorAction SilentlyContinue | Out-Null
@@ -914,13 +939,12 @@ If ($ApplySTIGItems -or $DisableAutoRun)
 }
 
 
-
-
 If( ($ApplySTIGItems -and $EnableFIPS) -or $EnableFIPS){
     If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78301r1_rule" -Severity 1 -Outhost}
     Write-LogEntry "Enabling FIPS Algorithm Policy" -Severity 1 -Outhost
     Configure-RegistryItem -Path "HKLM\System\CurrentControlSet\Control\Lsa\FIPSAlgorithmPolicy" -Name "Enabled" -Type DWord -Value 1 -Force | Out-Null
 }
+
 
 If ($EnableRDP)
 {
@@ -929,6 +953,7 @@ If ($EnableRDP)
 	Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Type DWord -Value 1 -Force | Out-Null
 	Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Action Allow -Profile Any
 }
+
 
 If ($DisableOneDrive)
 {
@@ -940,7 +965,7 @@ If ($DisableOneDrive)
     
     Configure-RegistryItem -Path 'HKCR\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}\ShellFolder' -Name Attributes -Type DWord -Value 0 -ErrorAction SilentlyContinue -Force | Out-Null
 
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-96851r1_rule: Disabling personal accounts for OneDrive synchronization..." -Severity 1 -Outhost
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-96851r1_rule :: Disabling personal accounts for OneDrive synchronization..." -Severity 1 -Outhost
         Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisablePersonalSync' -Type DWord -Value '1' -Force | Out-Null
     }
 
@@ -960,7 +985,7 @@ If ($DisableOneDrive)
     }
 }
 Else{
-    #Write-LogEntry "Applying STIG Rule ID: SV-98853r1_rule: Allowing OneDrive synchronizing of accounts for DoD organization..." -Severity 1 -Outhost
+    #Write-LogEntry "Applying STIG Rule ID: SV-98853r1_rule :: Allowing OneDrive synchronizing of accounts for DoD organization..." -Severity 1 -Outhost
     #Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\OneDrive\AllowTenantList' -Name '{ORG GUID}' -Type String -Value '{ORG GUID}' -Force | Out-Null
 }
 
@@ -999,19 +1024,26 @@ If($DisableAllNotifications)
     
     # Loop through each profile on the machine
     Foreach ($UserProfile in $UserProfiles) {
-        
+        If($UserProfile.SID -ne ".DEFAULT"){
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount])
+        }
+        Else{
+            $UserID = $UserProfile.SID
+        }
+
         # Load User ntuser.dat if it's not already loaded
         If (($ProfileWasLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
             # Manipulate the registry
             $settingspath = "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Notifications\Settings"
             Foreach ($key in $notifications.GetEnumerator()){
-                Write-LogEntry ("Removing Notification messages on SID: {0}" -f $UserProfile.SID) -Outhost
+                Write-LogEntry ("Removing Notification messages on User: {0}..." -f $UserID) -Outhost
                 #New-Item -Path ($settingspath + "\" + $key.Value) -ErrorAction SilentlyContinue | Out-Null
                 Configure-RegistryItem -Path ($settingspath + "\" + $key.Value) -Name Enabled -Value 0 -Type DWord -ErrorAction SilentlyContinue | Out-Null
 
                 If($ApplySTIGItems){
-                    Write-LogEntry ("Applying STIG Rule ID: SV-78329r1_rule: Disabling Toast notifications to the lock screen for user: {0}" -f $UserProfile.SID) -Severity 1 -Outhost
+                    Write-LogEntry ("Applying STIG Rule ID: SV-78329r1_rule :: Disabling Toast notifications to the lock screen for user: {0}" -f $UserProfile.SID) -Severity 1 -Outhost
                     Configure-RegistryItem -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name NoToastApplicationNotificationOnLockScreen -Type DWord -Value '1' -Force | Out-Null
                 }
 
@@ -1066,12 +1098,14 @@ If($EnableSecureLogonCtrlAltDelete)
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name BlockDomainPicturePassword -Type DWord -Value '1' -Force | Out-Null
 }
 
+
 # Disable New Network dialog box
 If ($DisableNewNetworkDialog)
 {
 	Write-LogEntry "Disabling New Network Dialog..." -Severity 1 -Outhost
     Configure-RegistryItem 'HKLM:\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet' -Name 'EnableActiveProbing' -Type DWord -Value '0' -Force | Out-Null
 }
+
 
 If($RemoveActiveSetupComponents -or $OptimizeForVDI){
 
@@ -1130,6 +1164,7 @@ If ($DisableInternetServices -or $OptimizeForVDI)
     
 }
 
+
 If ($DisabledUnusedServices -or $OptimizeForVDI)
 {
     Write-LogEntry "Disabling Homegroup Services" -Severity 1 -Outhost
@@ -1179,6 +1214,7 @@ If ($DisabledUnusedServices -or $OptimizeForVDI)
     }
 }
 
+
 If ($DisabledUnusedFeatures)
 {
     Write-LogEntry "Disabling Internet Printing" -Severity 3 -Outhost
@@ -1202,6 +1238,7 @@ If ($DisabledUnusedFeatures)
 
 }
 
+
 If ($DisableDefender -or $OptimizeForVDI)
 {
     Write-LogEntry "Disabling Windows Defender" -Severity 1 -Outhost
@@ -1216,6 +1253,7 @@ If ($DisableDefender -or $OptimizeForVDI)
     }
 }
 
+
 If ($DisableWireless -or $OptimizeForVDI)
 {
     Write-LogEntry "Disabling Wireless Services" -Severity 1 -Outhost
@@ -1227,6 +1265,7 @@ If ($DisableWireless -or $OptimizeForVDI)
         Write-LogEntry ("Unable to Disable Wireless Services: {0}" -f $_) -Severity 3 -Outhost
     }
 }
+
 
 If ($EnableRemoteRegistry -or $OptimizeForVDI)
 {
@@ -1240,11 +1279,13 @@ If ($EnableRemoteRegistry -or $OptimizeForVDI)
     }
 }
 
+
 If ($ApplySTIGItems -or $DisableBluetooth)
 {
     Write-LogEntry "Disabling Bluetooth..." -Severity 1 -Outhost
     Config-Bluetooth -DeviceStatus Off
 }
+
 
 # Disable Scheduled Tasks
 If ($DisableSchTasks -or $OptimizeForVDI)
@@ -1311,11 +1352,13 @@ If ($DisableSchTasks -or $OptimizeForVDI)
         }    }
 }
 
+
 If ($DisableRestore -or $OptimizeForVDI)
 {
     Write-LogEntry "Disable system restore" -Severity 1 -Outhost
     Disable-ComputerRestore -drive c:\
 }
+
 
 If ($DisableCortana)
 {
@@ -1324,6 +1367,7 @@ If ($DisableCortana)
 	#New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\' -Name 'Windows Search' -Force | Out-Null
 	Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -Type DWord -Value '0' -Force | Out-Null
 }
+
 
 If ($DisableInternetSearch -or $DisableCortana)
 {
@@ -1427,7 +1471,7 @@ If ($ApplySTIGItems -or $ApplyPrivacyMitigations)
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" -Name "Value" -Type DWord -Value 0 -Force | Out-Null
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" -Name "Value" -Type DWord -Value 0 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78035r1_rule: Disabling Wifi Sense..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78035r1_rule :: Disabling Wifi Sense..." -Severity 1 -Outhost
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config" -Name "AutoConnectAllowedOEM" -Type DWord -Value 0 -Force | Out-Null
 
     Write-LogEntry "Privacy Mitigations :: Disabling all feedback notifications..." -Severity 1 -Outhost
@@ -1463,6 +1507,7 @@ If($CleanSampleFolders)
     Remove-Item "$env:PUBLIC\Videos\Sample Videos" -Recurse -ErrorAction SilentlyContinue | Out-Null
 }
 
+
 If ($EnableWinRM)
 {
     Write-LogEntry "Enabling WinRM" -Severity 1 -Outhost
@@ -1478,18 +1523,18 @@ If ($EnableWinRM)
     if (($netprofile -eq "Private") -or ($netprofile -eq "DomainAuthenticated")){<#do noting#>}Else{Set-NetConnectionProfile -NetworkCategory Private}
 
     If($ApplySTIGItems){
-        Write-LogEntry "Applying STIG Rule ID: SV-77825r1_rule: Disabling Basic Authentication for WinRM" -Severity 1 -Outhost
+        Write-LogEntry "Applying STIG Rule ID: SV-77825r1_rule :: Disabling Basic Authentication for WinRM" -Severity 1 -Outhost
         Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" -Name "AllowBasic" -Type DWord -Value 0 -Force | Out-Null
         Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" -Name "AllowBasic" -Type DWord -Value 0 -Force | Out-Null
 
-        Write-LogEntry "Applying STIG Rule ID: SV-77829r1_rule: Disabling unencrypted traffic for WinRM" -Severity 1 -Outhost
+        Write-LogEntry "Applying STIG Rule ID: SV-77829r1_rule :: Disabling unencrypted traffic for WinRM" -Severity 1 -Outhost
         Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" -Name "AllowUnencryptedTraffic" -Type DWord -Value 0 -Force | Out-Null
         Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" -Name "AllowUnencryptedTraffic" -Type DWord -Value 0 -Force | Out-Null
 
-        Write-LogEntry "Applying STIG Rule ID: SV-77831r1_rule: Disabling Digest authentication for WinRM" -Severity 1 -Outhost
+        Write-LogEntry "Applying STIG Rule ID: SV-77831r1_rule :: Disabling Digest authentication for WinRM" -Severity 1 -Outhost
         Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" -Name "AllowDigest" -Type DWord -Value 0 -Force | Out-Null
 
-        Write-LogEntry "Applying STIG Rule ID: SV-77831r1_rule: Disabling Digest authentication for WinRM" -Severity 1 -Outhost
+        Write-LogEntry "Applying STIG Rule ID: SV-77831r1_rule :: Disabling Digest authentication for WinRM" -Severity 1 -Outhost
         Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" -Name "DisableRunAs" -Type DWord -Value 1 -Force | Out-Null
     }
 
@@ -1527,35 +1572,36 @@ If ($EnableWinRM)
     }
 }
 
+
 If($ApplySTIGItems -or $EnableStrictUAC)
 {
     Write-LogEntry "Setting strict UAC Level and enabling admin approval mode..." -Severity 1 -Outhost
 
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78309r1_rule: Enabling UAC prompt administrators for consent on the secure desktop..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78309r1_rule :: Enabling UAC prompt administrators for consent on the secure desktop..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -Type DWord -Value 2 -Force | Out-Null
     
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78311r1_rule: Disabling elevation UAC prompt User for consent on the secure desktop..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78311r1_rule :: Disabling elevation UAC prompt User for consent on the secure desktop..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorUser -Type DWord -Value 0 -Force | Out-Null
 
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78315r1_rule: Enabling elevation UAC prompt detect application installations and prompt for elevation..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC prompt detect application installations and prompt for elevation..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableInstallerDetection" -Type DWord -Value 1 -Force | Out-Null
     
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78315r1_rule: Enabling elevation UAC UIAccess applications that are installed in secure locations..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC UIAccess applications that are installed in secure locations..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableSecureUAIPaths" -Type DWord -Value 1 -Force | Out-Null
 
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78321r1_rule: Enabling Enable virtualize file and registry write failures to per-user locations.." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78321r1_rule :: Enabling Enable virtualize file and registry write failures to per-user locations.." -Severity 1 -Outhost}
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualization" -Type DWord -Value 1 -Force | Out-Null
         
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78319r1_rule: Enabling UAC for all administrators..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78319r1_rule :: Enabling UAC for all administrators..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Type DWord -Value 1 -Force | Out-Null
 
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78087r2_rule: FIlter Local administrator account privileged tokens..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78087r2_rule :: FIlter Local administrator account privileged tokens..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "LocalAccountTokenFilterPolicy" -Type DWord -Value 0 -Force | Out-Null
 
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78307r1_rule: Enabling User Account Control approval mode..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78307r1_rule :: Enabling User Account Control approval mode..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "FilterAdministratorToken" -Type DWord -Value 1 -Force | Out-Null
 
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78307r1_rule: Disabling enumerating elevated administator accounts..." -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78307r1_rule :: Disabling enumerating elevated administator accounts..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI" -Name "EnumerateAdministrators" -Type DWord -Value 0 -Force | Out-Null
 
     If($ApplySTIGItems -eq $false){
@@ -1567,12 +1613,14 @@ If($ApplySTIGItems -or $EnableStrictUAC)
     }
 }
 
+
 If ($EnableAppsRunAsAdmin)
 {
-    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78307r1_rule: Enabling User Account Control approval mode for local Administrator" -Severity 1 -Outhost}
+    If($ApplySTIGItems){Write-LogEntry "Applying STIG Rule ID: SV-78307r1_rule :: Enabling User Account Control approval mode for local Administrator" -Severity 1 -Outhost}
     Else{Write-LogEntry "Enabling UAC to allow Apps to run as Administrator..." -Severity 1 -Outhost}
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name FilterAdministratorToken -Type DWord -Value '1' -Force | Out-Null
 }
+
 
 If ($DisableUAC)
 {
@@ -1582,6 +1630,7 @@ If ($DisableUAC)
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name PromptOnSecureDesktop -Type DWord -Value '0' -Force | Out-Null
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name FilterAdministratorToken -Type DWord -Value 0 -Force | Out-Null
 }
+
 
 If ($ApplySTIGItems -or $DisableWUP2P)
 {
@@ -1604,6 +1653,7 @@ If ($EnableIEEnterpriseMode)
         Write-LogEntry ("IE Enterprise XML Path [{0}] is not found..." -f $IEEMSiteListPath) -Severity 1 -Outhost
     }
 }
+
 
 # Logon script
 If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
@@ -1631,9 +1681,9 @@ If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
 If(!$OptimizeForVDI -and $EnableCredGuard)
 {
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78085r5_rule: Enabling Virtualization Based Security..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78085r5_rule :: Enabling Virtualization Based Security..." -Severity 1 -Outhost
     
-    if ([int](Get-WmiObject -Class Win32_OperatingSystem).BuildNumber -gt 14393) {
+    if ($OSBuildNumber -gt 14393) {
         try {
             # For version older than Windows 10 version 1607 (build 14939), enable required Windows Features for Credential Guard
             Enable-WindowsOptionalFeature -FeatureName Microsoft-Hyper-V-HyperVisor -Online -All -LimitAccess -NoRestart -ErrorAction Stop | Out-Null
@@ -1653,7 +1703,7 @@ If(!$OptimizeForVDI -and $EnableCredGuard)
         }
     }
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78093r6_rule: Enabling Virtualization-based protection of code integrity..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78093r6_rule :: Enabling Virtualization-based protection of code integrity..." -Severity 1 -Outhost
     #https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-defender-exploit-guard/enable-virtualization-based-protection-of-code-integrity
     Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name RequirePlatformSecurityFeatures -Type DWord -Value 1 -Force | Out-Null
     Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name EnableVirtualizationBasedSecurity -Type DWord -Value 1 -Force | Out-Null
@@ -1664,7 +1714,7 @@ If(!$OptimizeForVDI -and $EnableCredGuard)
     Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Enabled -Type DWord -Value 1 -Force | Out-Null
     Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Locked -Type DWord -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78089r7_rule: Enabling Credential Guard on domain-joined systems..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems..." -Severity 1 -Outhost
     Configure-RegistryItem -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name LsaCfgFlags -Type DWord -Value 1 -Force | Out-Null   
     
     $DeviceGuardProperty = Get-CimInstance –ClassName Win32_DeviceGuard –Namespace root\Microsoft\Windows\DeviceGuard
@@ -1763,22 +1813,29 @@ If ($OptimizeForVDI)
 
     # Loop through each profile on the machine
     Foreach ($UserProfile in $UserProfiles) {
-        
+        If($UserProfile.SID -ne ".DEFAULT"){
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount])
+        }
+        Else{
+            $UserID = $UserProfile.SID
+        }
+
         # Load User ntuser.dat if it's not already loaded
         If (($ProfileWasLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
 
-            Write-LogEntry ("VDI Optimizations :: Settings Temporary Internet Files to Non Persistent on SID: {0}" -f $UserProfile.SID) -Outhost
+            Write-LogEntry ("VDI Optimizations :: Settings Temporary Internet Files to Non Persistent on User: {0}..." -f $UserID) -Outhost
             Configure-RegistryItem -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache" -Name Persistent -Value 0 -Type DWord -ErrorAction SilentlyContinue | Out-Null
                 
-            Write-LogEntry ("VDI Optimizations :: Disable RSS Feeds on SID: {0}" -f $UserProfile.SID) -Outhost
+            Write-LogEntry ("VDI Optimizations :: Disable RSS Feeds on User: {0}..." -f $UserID) -Outhost
             Configure-RegistryItem -Path "HKEY_USERS\$($UserProfile.SID)\\SOFTWARE\Microsoft\Feeds" -Name SyncStatus -Type DWord -Value 0 -Force | Out-Null
 
-            Write-LogEntry ("VDI Optimizations :: Disabling Storage Sense on SID: {0}" -f $UserProfile.SID) -Outhost
+            Write-LogEntry ("VDI Optimizations :: Disabling Storage Sense on User: {0}..." -f $UserID) -Outhost
             Remove-ItemProperty -Path "Registry::HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Recurse -ErrorAction SilentlyContinue | Out-Null
 
             If($ApplySTIGItems){
-                Write-LogEntry ("Applying STIG Rule ID: SV-78329r1_rule: Disabling Toast notifications to the lock screen for user: {0}" -f $UserProfile.SID) -Severity 1 -Outhost
+                Write-LogEntry ("Applying STIG Rule ID: SV-78329r1_rule :: Disabling Toast notifications to the lock screen for user: {0}" -f $UserID) -Severity 1 -Outhost
                 Configure-RegistryItem -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name NoToastApplicationNotificationOnLockScreen -Type DWord -Value '1' -Force | Out-Null
             }
         }
@@ -1792,6 +1849,7 @@ If ($OptimizeForVDI)
     }
 
 }
+
 
 If($EnableVisualPerformance -or $OptimizeForVDI)
 {
@@ -1815,6 +1873,7 @@ If($EnableVisualPerformance -or $OptimizeForVDI)
     
 }
 
+
 If($EnableDarkTheme)
 {
         # thanks to camxct
@@ -1823,16 +1882,24 @@ If($EnableDarkTheme)
 	Configure-RegistryItem -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Type DWord -Value 0 -Force | Out-Null
 }
 
+
 If($EnableNumlockStartup)
 {
 	Write-LogEntry "Enabling NumLock after startup..." -Severity 1 -Outhost
 	# Loop through each profile on the machine
     Foreach ($UserProfile in $UserProfiles) {
-        
+        If($UserProfile.SID -ne ".DEFAULT"){
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount])
+        }
+        Else{
+            $UserID = $UserProfile.SID
+        }
+
         # Load User ntuser.dat if it's not already loaded
         If (($ProfileWasLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden           
-            Write-LogEntry  ("Enabing Num lock for  on SID: {1}" -f $UserProfile.SID) -Outhost
+            Write-LogEntry  ("Enabing Num lock for  on User: {0}..." -f $UserID) -Outhost
             Configure-RegistryItem -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Keyboard" -Name InitialKeyboardIndicators -Value 2147483650 -Type DWord -ErrorAction SilentlyContinue -Force | Out-Null
         }
 
@@ -1853,6 +1920,7 @@ If($EnableNumlockStartup)
 	}
 }
 
+
 If($ShowKnownExtensions)
 {
 	Write-LogEntry "Showing known file extensions..." -Severity 1 -Outhost
@@ -1868,6 +1936,7 @@ If($ShowKnownExtensions)
 	Start-Process -FilePath "reg.exe" -ArgumentList "UNLOAD HKLM:\DEFAULT"
 }
 
+
 If($ShowHiddenFiles)
 {
 	Write-LogEntry "Showing hidden files..." -Severity 1 -Outhost
@@ -1882,6 +1951,7 @@ If($ShowHiddenFiles)
     # unload default hive
 	Start-Process -FilePath "reg.exe" -ArgumentList "UNLOAD HKLM:\DEFAULT"
 }
+
 
 If($ShowThisPCOnDesktop)
 {
@@ -1900,6 +1970,7 @@ If($ShowThisPCOnDesktop)
 	Start-Process -FilePath "reg.exe" -ArgumentList "UNLOAD HKLM:\DEFAULT"
 }
 
+
 If($ShowUserFolderOnDesktop)
 {
 	Write-LogEntry "Showing User Folder shortcut on desktop..." -Severity 1 -Outhost
@@ -1917,6 +1988,7 @@ If($ShowUserFolderOnDesktop)
 	Start-Process -FilePath "reg.exe" -ArgumentList "UNLOAD HKLM:\DEFAULT"
 }
 
+
 If($Hide3DObjectsFromExplorer)
 {
 	Write-LogEntry "Hiding 3D Objects icon from Explorer namespace..." -Severity 1 -Outhost
@@ -1925,11 +1997,13 @@ If($Hide3DObjectsFromExplorer)
 
 }
 
+
 If($DisableEdgeShortcutCreation)
 {
 	Write-LogEntry "Disabling Edge shortcut creation..." -Severity 1 -Outhost
 	Configure-RegistryItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "DisableEdgeDesktopShortcutCreation" -Type DWord -Value 1 -Force | Out-Null
 }
+
 
 If($ApplySTIGItems -or $SetSmartScreenFilter)
 {
@@ -1955,10 +2029,11 @@ If($ApplySTIGItems -or $SetSmartScreenFilter)
     Configure-RegistryItem -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "EnabledV9" -Type DWord -Value 1 -Force | Out-Null
 }
 
+
 If ($DisableFirewall)
 {
     If($ApplySTIGItems){
-        Write-LogEntry "Applying STIG Rule ID: SV-77889r1_rule: Enabling Windows Firewall" -Severity 1 -Outhost
+        Write-LogEntry "Applying STIG Rule ID: SV-77889r1_rule :: Enabling Windows Firewall" -Severity 1 -Outhost
         netsh advfirewall set allprofiles state on | Out-Null
     }
     Else{
@@ -1976,105 +2051,106 @@ If ($DisableFirewall)
 If ($ApplySTIGItems)
 {
     If($OptimizeForVDI){
-        Write-LogEntry "Applying Stig Item ignored for VDI: SV-77813r4_rule: Enabling TPM..." -Severity 1 -Outhost
-        Write-LogEntry "Applying Stig Item ignored for VDI: SV-91779r3_rule: Enabling UEFI..." -Severity 1 -Outhost
-        Write-LogEntry "Applying Stig Item ignored for VDI: SV-91781r2_rule: Enabling SecureBoot..." -Severity 1 -Outhost
-        Write-LogEntry "Applying Stig Item ignored for VDI: SV-78085r5_rule: Enabling Virtualization Based Security..." -Severity 1 -Outhost
-        Write-LogEntry "Applying Stig Item ignored for VDI: SV-78089r7_rule: Enabling Credential Guard..." -Severity 1 -Outhost
-        Write-LogEntry "Applying Stig Item ignored for VDI: SV-78093r6_rule: Enabling Virtualization-based protection of code integrity..." -Severity 1 -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-77813r4_rule :: Enabling TPM..." -Severity 1 -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-91779r3_rule :: Enabling UEFI..." -Severity 1 -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-91781r2_rule :: Enabling SecureBoot..." -Severity 1 -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-78085r5_rule :: Enabling Virtualization Based Security..." -Severity 1 -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-78089r7_rule :: Enabling Credential Guard..." -Severity 1 -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-78093r6_rule :: Enabling Virtualization-based protection of code integrity..." -Severity 1 -Outhost
     }
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78219r1_rule: Disabling saved password for RDP..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78219r1_rule :: Disabling saved password for RDP..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'DisablePasswordSaving' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78223r1_rule: Forcing password prompt for RDP connections..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78223r1_rule :: Forcing password prompt for RDP connections..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fPromptForPassword' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78221r1_rule: Preventing sharing of local drives with RDP Session Hosts..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78221r1_rule :: Preventing sharing of local drives with RDP Session Hosts..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fDisableCdm' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78221r1_rule: Enabling RDP Session Hosts secure RPC communications..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78221r1_rule :: Enabling RDP Session Hosts secure RPC communications..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fEncryptRPCTraffic' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78221r1_rule: Enabling RDP encryption level to High..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78221r1_rule :: Enabling RDP encryption level to High..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'MinEncryptionLevel' -Value 3 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78207r5_rule: Enabling hardware security device requirement with Windows Hello..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78207r5_rule :: Enabling hardware security device requirement with Windows Hello..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork' -Name 'RequireSecurityDevice' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78211r5_rule: Enabling minimum pin length of six characters or greater..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78211r5_rule :: Enabling minimum pin length of six characters or greater..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork\PINComplexity' -Name 'MinimumPINLength' -Value 6 -Force | Out-Null
 
    
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78107r1_rule: Enabling Audit policy using subcategories..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78107r1_rule :: Enabling Audit policy using subcategories..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'SCENoApplyLegacyAuditPolicy' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78125r1_rule: Disabling Local accounts with blank passwords..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78125r1_rule :: Disabling Local accounts with blank passwords..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LimitBlankPasswordUse' -Value 1 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78229r1_rule: Disabling Anonymous SID/Name translation..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78229r1_rule :: Disabling Anonymous SID/Name translation..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'TurnOffAnonymousBlock' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78235r1_rule: Disabling Anonymous enumeration of SAM accounts..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78235r1_rule :: Disabling Anonymous enumeration of SAM accounts..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'RestrictAnonymousSAM' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78239r1_rule: Disabling Anonymous enumeration of shares..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78239r1_rule :: Disabling Anonymous enumeration of shares..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'RestrictAnonymous' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-86393r3_rule: Restricting Remote calls to the Security Account Manager (SAM) to Administrators..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-86393r3_rule :: Restricting Remote calls to the Security Account Manager (SAM) to Administrators..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'RestrictRemoteSAM' -Type String -Value "O:BAG:BAD:(A;;RC;;;BA)" -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78253r1_rule: Restricting Services using Local System that use Negotiate when reverting to NTLM authentication..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78253r1_rule :: Restricting Services using Local System that use Negotiate when reverting to NTLM authentication..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'UseMachineId' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78245r1_rule: Disabling prevent anonymous users from having the same rights as the Everyone group..." -Severity 1 -Outhost
-    Write-LogEntry "Applying STIG Rule ID: SV-77863r2_rule: Disabling Let everyone permissions apply to anonymous users..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78245r1_rule :: Disabling prevent anonymous users from having the same rights as the Everyone group..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-77863r2_rule :: Disabling Let everyone permissions apply to anonymous users..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'EveryoneIncludesAnonymous' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78255r1_rule: Disabling NTLM from falling back to a Null session..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78255r1_rule :: Disabling NTLM from falling back to a Null session..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\LSA\MSV1_0' -Name 'allownullsessionfallback' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78295r1_rule: Disabling requirement for NTLM SSP based clients" -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78295r1_rule :: Disabling requirement for NTLM SSP based clients" -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\LSA\MSV1_0' -Name 'NTLMMinClientSec' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78257r1_rule: Disabling PKU2U authentication using online identities..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78257r1_rule :: Disabling PKU2U authentication using online identities..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\LSA\pku2u' -Name 'AllowOnlineID' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78285r1_rule: Disabling Kerberos encryption types DES and RC4..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78285r1_rule :: Disabling Kerberos encryption types DES and RC4..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters' -Type DWord -Name 'SupportedEncryptionTypes' -Value 0x7ffffff8 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78287r1_rule: Disabling LAN Manager hash of passwords for storage..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78287r1_rule :: Disabling LAN Manager hash of passwords for storage..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'NoLMHash' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID:  SV-78291r1_rule: Disabling NTLMv2 response only, and to refuse LM and NTLM..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID:  SV-78291r1_rule :: Disabling NTLMv2 response only, and to refuse LM and NTLM..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'LmCompatibilityLevel' -Value 5 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78293r1_rule: Enabling LDAP client signing level..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78293r1_rule :: Enabling LDAP client signing level..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LDAP' -Name 'LDAPClientIntegrity' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78129r1_rule: Enabling Outgoing secure channel traffic encryption or signature..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78129r1_rule :: Enabling Outgoing secure channel traffic encryption or signature..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'RequireSignOrSeal' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78133r1_rule: Enabling Outgoing secure channel traffic encryption when possible..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78133r1_rule :: Enabling Outgoing secure channel traffic encryption when possible..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'SealSecureChannel' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78137r1_rule: Enabling Outgoing secure channel traffic encryption when possible..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78137r1_rule :: Enabling Outgoing secure channel traffic encryption when possible..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'SignSecureChannel' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78143r1_rule: Disabling the ability to reset computer account password..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78143r1_rule :: Disabling the ability to reset computer account password..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'DisablePasswordChange' -Value 1 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID:  SV-78151r1_rule: Configuring maximum age for machine account password to 30 days..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID:  SV-78151r1_rule :: Configuring maximum age for machine account password to 30 days..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'MaximumPasswordAge' -Value 30 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78155r1_rule: Configuring strong session key for machine account password..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78155r1_rule :: Configuring strong session key for machine account password..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'RequireStrongKey' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78159r2_rule: Configuring machine inactivity limit must be set to 15 minutes..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78159r2_rule :: Configuring machine inactivity limit must be set to 15 minutes..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'InactivityTimeoutSecs' -Value 900 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78165r2_rule: Configuring legal notice logon notification..." -Severity 1 -Outhost
+    <#
+    Write-LogEntry "Applying STIG Rule ID: SV-78165r2_rule :: Configuring legal notice logon notification..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Type String -Name LegalNoticeText -Value ("`
         You are accessing a U.S. Government (USG) Information System (IS) that is provided for USG-authorized use only.`
         By using this IS (which includes any device attached to this IS), you consent to the following conditions:`
@@ -2085,199 +2161,207 @@ If ($ApplySTIGItems)
         -Notwithstanding the above, using this IS does not constitute consent to PM, LE or CI investigative searching or monitoring of the content of privileged communications, or work product, related to personal representation or services by attorneys, psychotherapists, or clergy, and their assistants. Such communications and work product are private and confidential. See User Agreement for details.")`
      -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78171r1_rule: Configuring legal notice logon title box..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78171r1_rule :: Configuring legal notice logon title box..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Type String -Name LegalNoticeCaption -Value "DoD Notice and Consent Banner" -Force | Out-Null
+    #>
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78177r1_rule: Disabling Caching of logon credentials" -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78177r1_rule :: Disabling Caching of logon credentials" -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'CachedLogonsCount' -Value 10 -Force | Out-Null
-
     
     If($OptimizeForVDI){
-        Write-LogEntry "Applying STIG Rule ID: SV-78187r1_rule: Configuring Smart Card removal to Force Logoff..." -Severity 1 -Outhost
+        Write-LogEntry "Applying STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Force Logoff..." -Severity 1 -Outhost
         Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force | Out-Null
     }
     Else{
-        Write-LogEntry "Applying STIG Rule ID: SV-78187r1_rule: Configuring Smart Card removal to Lock Workstation..." -Severity 1 -Outhost
+        Write-LogEntry "Applying STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Lock Workstation..." -Severity 1 -Outhost
         Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 1 -Force | Out-Null
     }
 
-    Write-LogEntry "Applying STIG Rule ID: SV-77873r1_rule: Disabling Simple TCP/IP Services and Feature..." -Severity 1 -Outhost
-    Disable-WindowsOptionalFeature -online -FeatureName SimpleTCP | Out-Null
-
-    Write-LogEntry "Applying STIG Rule ID: SV-77875r1_rule: Disabling Telnet Client Feature..." -Severity 1 -Outhost
-    Disable-WindowsOptionalFeature -online -FeatureName TelnetClient | Out-Null
-
-    Write-LogEntry "Applying STIG Rule ID: SV-85259r1_rule: Disabling Windows PowerShell 2.0 Feature..." -Severity 1 -Outhost
-    Disable-WindowsOptionalFeature -online -FeatureName MicrosoftWindowsPowerShellV2 | Out-Null
-    Disable-WindowsOptionalFeature -online -FeatureName MicrosoftWindowsPowerShellV2Root | Out-Null
-
-    Write-LogEntry "Applying STIG Rule ID: SV-89399r1_rule: Disabling Server Message Block (SMB) v1 Service ..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-89399r1_rule :: Disabling Server Message Block (SMB) v1 Service ..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\mrxsmb10' -Name 'Start' -Value 4 -Force | Out-Null
 
-    #Write-LogEntry "Applying STIG Rule ID: SV-89393r1_rule: Disabling Secondary Logon" -Severity 1 -Outhost
-    #Get-Service 'seclogon' | Set-Service -StartupType Disabled -ErrorAction Stop
+    Write-LogEntry "Applying STIG Rule ID: SV-89393r1_rule :: Disabling Secondary Logon service" -Severity 1 -Outhost
+    Try{
+        Get-Service 'seclogon' | Set-Service -StartupType Disabled -ErrorAction Stop
+    }
+    Catch [System.Management.Automation.ActionPreferenceStopException]{
+        Write-LogEntry ("Unable to disable Secondary Login Service: {0}" -f $_) -Severity 3 -Outhost
+    }
 
-    Write-LogEntry "Applying STIG Rule ID: SV-83439r2_rule: Enabling Data Execution Prev ention (DEP) boot configuration" -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-83439r2_rule :: Enabling Data Execution Prev ention (DEP) boot configuration" -Severity 1 -Outhost
 	Manage-Bde -Protectors -Disable C:
     Start-process bcdedit -ArgumentList '/set nx OptOut' -Wait -NoNewWindow | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78185r1_rule: Enabling Explorer Data Execution Prevention policy" -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78185r1_rule :: Enabling Explorer Data Execution Prevention policy" -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'NoDataExecutionPrevention' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78181r3_rule: Enabling File Explorer shell protocol protected mode" -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78181r3_rule :: Enabling File Explorer shell protocol protected mode" -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name 'PreXPSP2ShellProtocolBehavior' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-89089r2_rule: Preventing Microsoft Edge browser data from being cleared on exit" -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-89089r2_rule :: Preventing Microsoft Edge browser data from being cleared on exit" -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Privacy' -Name 'ClearBrowsingHistoryOnExit' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-83445r4_rule: Disabling Session Kernel Exception Chain Validation..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-83445r4_rule :: Disabling Session Kernel Exception Chain Validation..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel' -Name 'DisableExceptionChainValidation' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78045r1_rule/SV-78049r1_rule: Setting IPv6 source routing to highest protection..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78045r1_rule/SV-78049r1_rule :: Setting IPv6 source routing to highest protection..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisableIpSourceRouting' -Value 2 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78053r1_rule: Disabling ICMP redirects from overriding Open Shortest Path First (OSPF) generated routes..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78053r1_rule :: Disabling ICMP redirects from overriding Open Shortest Path First (OSPF) generated routes..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'EnableICMPRedirect' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78057r1_rule: Disabling NetBIOS name release requests except from WINS servers..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78057r1_rule :: Disabling NetBIOS name release requests except from WINS servers..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netbt\Parameters' -Name 'NoNameReleaseOnDemand' -Value 1 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-86387r1_rule: Disabling WDigest Authentication..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-86387r1_rule :: Disabling WDigest Authentication..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\Wdigest' -Name 'UseLogonCredential' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-86953r1_rule: Removing Run as different user contect menu..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-86953r1_rule :: Removing Run as different user contect menu..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Classes\batfile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force | Out-Null
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Classes\cmdfile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force | Out-Null
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Classes\exefile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force | Out-Null
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Classes\mscfile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78059r2_rule: Disabling insecure logons to an SMB server..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78059r2_rule :: Disabling insecure logons to an SMB server..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation' -Name 'AllowInsecureGuestAuth' -Value 0 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78193r1_rule: Enabling SMB packet signing..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78193r1_rule :: Enabling SMB packet signing..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\Parameters' -Name 'RequireSecuritySignature' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78197r1_rule: Enabling SMB packet signing when possible..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78197r1_rule :: Enabling SMB packet signing when possible..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\Parameters' -Name 'EnableSecuritySignature' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78201r1_rule: Disabling plain text password on SMB Servers..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78201r1_rule :: Disabling plain text password on SMB Servers..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\Parameters' -Name 'EnablePlainTextPassword' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-85261r2_rule: Disabling Server Message Block (SMB) v1 on Server..." -Severity 1 -Outhost
-    Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol | Out-Null
+    Write-LogEntry "Applying STIG Rule ID: SV-85261r2_rule :: Disabling Server Message Block (SMB) v1 on Server..." -Severity 1 -Outhost
+    Try{
+        Disable-WindowsOptionalFeature -FeatureName SMB1Protocol -Online -NoRestart -ErrorAction Stop | Out-Null
+    }
+    Catch [System.Management.Automation.ActionPreferenceStopException]{
+        Write-LogEntry ("Unable to remove SMB1Protocol Feature: {0}" -f $_) -Severity 3 -Outhost
+    }
+
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -Name 'SMB1' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78209r1_rule: Enabling SMB Server packet signing..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78209r1_rule :: Enabling SMB Server packet signing..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanManServer\Parameters' -Name 'RequireSecuritySignature' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78213r1_rule: Enabling SMB Srver packet signing when possible..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78213r1_rule :: Enabling SMB Srver packet signing when possible..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanManServer\Parameters' -Name 'EnableSecuritySignature' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78249r1_rule: Disabling  Anonymous access to Named Pipes and Shares..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78249r1_rule :: Disabling  Anonymous access to Named Pipes and Shares..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanManServer\Parameters' -Name 'RestrictNullSessAccess' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-86389r1_rule: Disabling Internet connection sharing..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-86389r1_rule :: Disabling Internet connection sharing..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections' -Name 'NC_ShowSharedAccessUI' -Value 0 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78067r1_rule: Disabling Internet connection sharing..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78067r1_rule :: Disabling Internet connection sharing..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths' -Name '\\*\NETLOGON' -Type String -Value "RequireMutualAuthentication=1, RequireIntegrity=1" -Force | Out-Null
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths' -Name '\\*\SYSVOL' -Type String -Value "RequireMutualAuthentication=1, RequireIntegrity=1" -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-89087r1_rule: Enabling prioritize ECC Curves with longer key lengths..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-89087r1_rule :: Enabling prioritize ECC Curves with longer key lengths..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Cryptography\Configuration\SSL\00010002' -Name 'EccCurves' -Type MultiString -Value "NistP384 NistP256" -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78071r2_rule: Limiting simultaneous connections to the Internet or a Windows domain..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78071r2_rule :: Limiting simultaneous connections to the Internet or a Windows domain..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\GroupPolicy' -Name 'fMinimizeConnections' -Value 1 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78075r1_rule: Limiting simultaneous connections to the Internet or a Windows domain..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78075r1_rule :: Limiting simultaneous connections to the Internet or a Windows domain..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\GroupPolicy' -Name 'fBlockNonDomain' -Value 1 -Force | Out-Null
    
-    Write-LogEntry "Applying STIG Rule ID: SV-83409r1_rule: Enabling event logging for command line ..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-83409r1_rule :: Enabling event logging for command line ..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit' -Name 'ProcessCreationIncludeCmdLine_Enabled' -Value 1 -Force | Out-Null
 	
-    Write-LogEntry "Applying STIG Rule ID: SV-89373r1_rule: Enabling Remote host allows delegation of non-exportable credentials..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-89373r1_rule :: Enabling Remote host allows delegation of non-exportable credentials..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation' -Name 'AllowProtectedCreds' -Value 1 -Force | Out-Null
     
-    Write-LogEntry "Applying STIG Rule ID: SV-78097r1_rule: Disabling Early Launch Antimalware, Boot-Start Driver Initialization Policy..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78097r1_rule :: Disabling Early Launch Antimalware, Boot-Start Driver Initialization Policy..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Policies\EarlyLaunch' -Name 'DriverLoadPolicy' -Value 8 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78099r1_rule: Enabling Group Policy objects reprocessing..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78099r1_rule :: Enabling Group Policy objects reprocessing..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}' -Name 'NoGPOListChanges' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78105r1_rule: Disablng Downloading print driver packages over HTTP..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78105r1_rule :: Disablng Downloading print driver packages over HTTP..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers' -Name 'DisableWebPnPDownload' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78111r1_rule: Disablng Web publishing and online ordering wizards..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78111r1_rule :: Disablng Web publishing and online ordering wizards..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name 'NoWebServices' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78113r1_rule: Disablng Printing over HTTP..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78113r1_rule :: Disablng Printing over HTTP..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers' -Name 'DisableHTTPPrinting' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78117r1_rule: Enabling device authentication using certificates if possible..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78117r1_rule :: Enabling device authentication using certificates if possible..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters' -Name 'DevicePKInitEnabled' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78119r1_rule: Disabling network selection user interface (UI) on the logon screen..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78119r1_rule :: Disabling network selection user interface (UI) on the logon screen..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'DontDisplayNetworkSelectionUI' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78123r1_rule: Disabling local user enumerating..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78123r1_rule :: Disabling local user enumerating..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'EnumerateLocalUsers' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78135r1_rule: Enabling users must be prompted for a password on resume from sleep (on battery)..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78135r1_rule :: Enabling users must be prompted for a password on resume from sleep (on battery)..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51' -Name 'DCSettingIndex' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78139r1_rule: Enabling users must be prompted for a password on resume from sleep (on battery)..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78139r1_rule :: Enabling users must be prompted for a password on resume from sleep (on battery)..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51' -Name 'ACSettingIndex' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78141r1_rule: Disabling Solicited Remote Assistance..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78141r1_rule :: Disabling Solicited Remote Assistance..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fAllowToGetHelp' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78147r1_rule: Disabling Unauthenticated RPC clients..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78147r1_rule :: Disabling Unauthenticated RPC clients..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Rpc' -Name 'RestrictRemoteClients' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78149r2_rule: Disabling Microsoft accounts for modern style apps..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78149r2_rule :: Disabling Microsoft accounts for modern style apps..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'MSAOptional' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78167r3_rule: Enabling enhanced anti-spoofing for facial recognition..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78167r3_rule :: Enabling enhanced anti-spoofing for facial recognition..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Biometrics\FacialFeatures' -Name 'EnhancedAntiSpoofing' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-96853r1_rule: Preventing certificate error overrides in Microsoft Edge..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-96853r1_rule :: Preventing certificate error overrides in Microsoft Edge..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name 'PreventCertErrorOverrides' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78195r4_rule: Disabling InPrivate browsing in Microsoft Edge..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78195r4_rule :: Disabling InPrivate browsing in Microsoft Edge..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'AllowInPrivate' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78195r4_rule: Disabling password manager in Microsoft Edge..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78195r4_rule :: Disabling password manager in Microsoft Edge..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'FormSuggest Passwords' -Type String -Value "no" -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78233r1_rule: Disabling attachments from RSS feeds..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78233r1_rule :: Disabling attachments from RSS feeds..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Feeds' -Name 'DisableEnclosureDownload' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78237r1_rule: Disabling Basic authentication to RSS feeds..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78237r1_rule :: Disabling Basic authentication to RSS feeds..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Feeds' -Name 'AllowBasicAuthInClear' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-78241r1_rule: Disabling indexing of encrypted files..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-78241r1_rule :: Disabling indexing of encrypted files..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowIndexingEncryptedStoresOrItems' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-77811r1_rule: Disabling changing installation options for users..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-77811r1_rule :: Disabling changing installation options for users..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name 'EnableUserControl' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-77815r1_rule: Disabling Windows Installer installation with elevated privileges..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-77815r1_rule :: Disabling Windows Installer installation with elevated privileges..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name 'AlwaysInstallElevated' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-77819r1_rule: Enabling notification if a web-based program attempts to install..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-77819r1_rule :: Enabling notification if a web-based program attempts to install..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name 'SafeForScripting' -Value 0 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: SV-77823r1_rule: Disabling Automatically signing in the last interactive user after a system-initiated restart..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-77823r1_rule :: Disabling Automatically signing in the last interactive user after a system-initiated restart..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'DisableAutomaticRestartSignOn' -Value 0 -Force | Out-Null
 
     # Loop through each profile on the machine
     Foreach ($UserProfile in $UserProfiles) {
-        
+        If($UserProfile.SID -ne ".DEFAULT"){
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount])
+        }
+        Else{
+            $UserID = $UserProfile.SID
+        }
+
         # Load User ntuser.dat if it's not already loaded
         If (($ProfileWasLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden 
                   
-            Write-LogEntry ("Applying STIG Rule ID: SV-78331r2_rule: Perserving Zone information on attachments for user: {0}" -f $UserProfile.SID) -Severity 1 -Outhost
+            Write-LogEntry ("Applying STIG Rule ID: SV-78331r2_rule :: Perserving Zone information on attachments for User: {0}" -f $UserID) -Severity 1 -Outhost
             Configure-RegistryItem -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments" -Name SaveZoneInformation -Value 2 -Type DWord -ErrorAction SilentlyContinue | Out-Null
         }
 
@@ -2289,29 +2373,51 @@ If ($ApplySTIGItems)
         }
     }
 
-
-    #Write-LogEntry "Applying STIG Rule ID: SV-78069r4_rule: DoD Root CA certificates must be installed in the Trusted Root Store..." -Severity 1 -Outhost
-    #Get-ChildItem -Path Cert:Localmachine\root | Where Subject -Like "*DoD*" | FL Subject, Thumbprint, NotAfter
-
-    #Write-LogEntry "Applying STIG Rule ID: SV-78073r3_rule: External Root CA certificates must be installed in the Trusted Root Store on unclassified systems..." -Severity 1 -Outhost
-    #Get-ChildItem -Path Cert:Localmachine\root | Where Subject -Like "*ECA*" | FL Subject, Thumbprint, NotAfter
-
-    #Write-LogEntry "Applying STIG Rule ID: SV-78077r4_rule: DoD Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systemss..." -Severity 1 -Outhost
-    #Get-ChildItem -Path Cert:Localmachine\disallowed | Where {$_.Issuer -Like "*DoD Interoperability*" -and $_.Subject -Like "*DoD*"} | FL Subject, Issuer, Thumbprint, NotAfter
-    
-    
-    #Write-LogEntry "Applying STIG Rule ID: SV-78079r3_rule: US DoD CCEB Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systems." -Severity 1 -Outhost
-    #Get-ChildItem -Path Cert:Localmachine\disallowed | Where Issuer -Like "*CCEB Interoperability*" | FL Subject, Issuer, Thumbprint, NotAfter
-    
-
-	
-    Write-LogEntry "Applying STIG Rule ID: Clearing Session Subsystem's..." -Severity 1 -Outhost
-    Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems' -Name 'Optional' -Type MultiString -Value "" -Force | Out-Null
-
-    Write-LogEntry "Applying STIG Rule ID: Disabling File System's 8.3 Name Creation..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-18420r1_rule :: Disabling File System's 8.3 Name Creation..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'NtfsDisable8dot3NameCreation' -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Applying STIG Rule ID: Disabling RASMAN PPP Parameters..." -Severity 1 -Outhost
+    Write-LogEntry "Applying STIG Rule ID: SV-77873r1_rule :: Disabling Simple TCP/IP Services and Feature..." -Severity 1 -Outhost
+    Try{
+        Disable-WindowsOptionalFeature -FeatureName SimpleTCP -Online -NoRestart -ErrorAction Stop | Out-Null
+    }
+    Catch [System.Management.Automation.ActionPreferenceStopException]{
+        Write-LogEntry ("Unable to remove Simple TCP/IP Feature: {0}" -f $_) -Severity 3 -Outhost
+    }
+
+    Write-LogEntry "Applying STIG Rule ID: SV-77875r1_rule :: Disabling Telnet Client Feature..." -Severity 1 -Outhost
+    Try{
+        Disable-WindowsOptionalFeature -FeatureName TelnetClient -Online -NoRestart -ErrorAction Stop | Out-Null
+    }
+    Catch [System.Management.Automation.ActionPreferenceStopException]{
+        Write-LogEntry ("Unable to remove TelnetClient: {0}" -f $_) -Severity 3 -Outhost
+    }
+
+    Write-LogEntry "Applying STIG Rule ID: SV-85259r1_rule :: Disabling Windows PowerShell 2.0 Feature..." -Severity 1 -Outhost
+    Try{
+        Disable-WindowsOptionalFeature -FeatureName MicrosoftWindowsPowerShellV2 -Online -NoRestart -ErrorAction Stop | Out-Null
+        Disable-WindowsOptionalFeature -FeatureName MicrosoftWindowsPowerShellV2Root -Online -NoRestart -ErrorAction Stop | Out-Null
+    }
+    Catch [System.Management.Automation.ActionPreferenceStopException]{
+        Write-LogEntry ("Unable to remove PowerShellV2 Feature: {0}" -f $_) -Severity 3 -Outhost
+    }
+
+    #Write-LogEntry "Applying STIG Rule ID: SV-78069r4_rule :: DoD Root CA certificates must be installed in the Trusted Root Store..." -Severity 1 -Outhost
+    #Get-ChildItem -Path Cert:Localmachine\root | Where Subject -Like "*DoD*" | FL Subject, Thumbprint, NotAfter
+
+    #Write-LogEntry "Applying STIG Rule ID: SV-78073r3_rule :: External Root CA certificates must be installed in the Trusted Root Store on unclassified systems..." -Severity 1 -Outhost
+    #Get-ChildItem -Path Cert:Localmachine\root | Where Subject -Like "*ECA*" | FL Subject, Thumbprint, NotAfter
+
+    #Write-LogEntry "Applying STIG Rule ID: SV-78077r4_rule :: DoD Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systemss..." -Severity 1 -Outhost
+    #Get-ChildItem -Path Cert:Localmachine\disallowed | Where {$_.Issuer -Like "*DoD Interoperability*" -and $_.Subject -Like "*DoD*"} | FL Subject, Issuer, Thumbprint, NotAfter
+    
+    #Write-LogEntry "Applying STIG Rule ID: SV-78079r3_rule :: US DoD CCEB Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systems." -Severity 1 -Outhost
+    #Get-ChildItem -Path Cert:Localmachine\disallowed | Where Issuer -Like "*CCEB Interoperability*" | FL Subject, Issuer, Thumbprint, NotAfter
+    
+    #Write-LogEntry "Clearing Session Subsystem's..." -Severity 1 -Outhost
+    #Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems' -Name 'Optional' -Type MultiString -Value "" -Force | Out-Null
+
+    <#
+    Write-LogEntry "Disabling RASMAN PPP Parameters..." -Severity 1 -Outhost
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'DisableSavePassword' -Value 1 -Force | Out-Null
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'Logging' -Value 1 -Force | Out-Null
     Configure-RegistryItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'ForceEncryptedData' -Value 1 -Force | Out-Null
@@ -2323,6 +2429,7 @@ If ($ApplySTIGItems)
 
 If($ApplySTIGItems -or $ApplyEMETMitigations)
 {
+    if ($OSBuildNumber -gt 17763) {
       <#
         Set-ProcessMitigation System -enable DEP
         Set-ProcessMitigation System -enable BottomUp
@@ -2355,193 +2462,197 @@ If($ApplySTIGItems -or $ApplyEMETMitigations)
         Set-ProcessMitigation system -enable TerminateOnError 
     #>
 
-    Write-LogEntry "Applying STIG Rule ID: SV-91787r3_rule: Enabling Data Execution Prevention (DEP) for exploit protection..." -Severity 1 -Outhost
-    If((Get-ProcessMitigation -System).DEP.Enable -eq "OFF"){
-          Set-Processmitigation -System -Enable DEP
-    }
+        Write-LogEntry "Applying STIG Rule ID: SV-91787r3_rule :: Enabling Data Execution Prevention (DEP) for exploit protection..." -Severity 1 -Outhost
+        If((Get-ProcessMitigation -System).DEP.Enable -eq "OFF"){
+              Set-Processmitigation -System -Enable DEP
+        }
 
-    Write-LogEntry "Applying STIG Rule ID: SV-91791r4_rule: Enabling Randomize memory allocations (Bottom-Up ASLR) for exploit protection..." -Severity 1 -Outhost
-    If((Get-ProcessMitigation -System).ASLR.BottomUp -eq "OFF"){
-        Set-Processmitigation -System -Enable BottomUp
-    }
+        Write-LogEntry "Applying STIG Rule ID: SV-91791r4_rule :: Enabling (Bottom-Up ASLR) for exploit protection..." -Severity 1 -Outhost
+        If((Get-ProcessMitigation -System).ASLR.BottomUp -eq "OFF"){
+            Set-Processmitigation -System -Enable BottomUp
+        }
 
-    Write-LogEntry "Applying STIG Rule ID: SV-91793r3_rule: Enabling Control flow guard (CFG) for exploit protection..." -Severity 1 -Outhost
-    If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
-        Set-Processmitigation -System -Enable CFG
-    }
+        Write-LogEntry "Applying STIG Rule ID: SV-91793r3_rule :: Enabling Control flow guard (CFG) for exploit protection..." -Severity 1 -Outhost
+        If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
+            Set-Processmitigation -System -Enable CFG
+        }
 
-    Write-LogEntry "Applying STIG Rule ID: SV-91797r3_rule: Enabling Validate exception chains (SEHOP) for exploit protection..." -Severity 1 -Outhost
-    If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
-        Set-Processmitigation -System -Enable SEHOP
-    }
+        Write-LogEntry "Applying STIG Rule ID: SV-91797r3_rule :: Enabling Validate exception chains (SEHOP) for exploit protection..." -Severity 1 -Outhost
+        If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
+            Set-Processmitigation -System -Enable SEHOP
+        }
 
-    Write-LogEntry "Applying STIG Rule ID: SV-91799r3_rule: Enabling Validate heap integrity for exploit protection..." -Severity 1 -Outhost
-    If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
-        Set-Processmitigation -System -Enable TerminateOnError
-    }
-
-
-    #DEP: ON
-    $ApplicationMitigationsDep = @{
-        "SV-91885r2_rule:"="Acrobat.exe"
-        "SV-91887r2_rule"="AcroRd32.exe"
-        "SV-91897r2_rule"="EXCEL.EXE"
-        "SV-91901r2_rule"="firefox.exe"
-        "SV-91891r2_rule"="chrome.exe"
-        "SV-91905r2_rule"="FLTLDR.EXE"
-        "SV-91909r2_rule"="GROOVE.EXE"
-        "SV-91913r2_rule"="iexplore.exe"
-        "SV-91917r2_rule"="INFOPATH.EXE"
-        "SV-91919r2_rule Part 1"="java.exe"
-        "SV-91919r2_rule Part 2"="javaw.exe"
-        "SV-91919r2_rule Part 3"="javaws.exe"
-        "SV-91923r2_rule"="lync.exe"
-        "SV-91927r2_rule"="MSACCESS.EXE"
-        "SV-91929r2_rule"="MSPUB.EXE"
-        "SV-91935r2_rule"="OIS.EXE"
-        "SV-91931r2_rule"="OneDrive.exe"
-        "SV-91939r2_rule"="OUTLOOK.EXE"
-        "SV-91941r2_rule"="plugin-container.exe"
-        "SV-91943r2_rule"="POWERPNT.EXE"
-        "SV-91945r2_rule"="PPTVIEW.EXE"
-        "SV-91951r2_rule"="VISIO.EXE"
-        "SV-91955r2_rule"="VPREVIEW.EXE"
-        "SV-91959r2_rule"="WINWORD.EXE"
-        "SV-91963r2_rule"="wmplayer.exe"
-        "SV-91965r2_rule"="wordpad.exe"
-    }
-
-    #ASLR: BottomUp: ON
-    $ApplicationMitigationsASLR_BU = @{
-        "SV-91885r2_rule:"="Acrobat.exe"
-        "SV-91887r2_rule"="AcroRd32.exe"
-        "SV-91901r2_rule"="firefox.exe"
-        "SV-91913r2_rule"="iexplore.exe"
-    }
-
-    #ASLR: ForceRelocateImages: ON
-    $ApplicationMitigationsASLR_FRI = @{
-        "SV-91885r2_rule:"="Acrobat.exe"
-        "SV-91887r2_rule"="AcroRd32.exe"
-        "SV-91901r2_rule"="firefox.exe"
-        "SV-91897r2_rule"="EXCEL.EXE"
-        "SV-91913r2_rule"="iexplore.exe"
-        "SV-91917r2_rule"="INFOPATH.EXE"
-        "SV-91923r2_rule"="lync.exe"
-        "SV-91927r2_rule"="MSACCESS.EXE"
-        "SV-91929r2_rule"="MSPUB.EXE"
-        "SV-91931r2_rule"="OneDrive.exe"
-        "SV-91939r2_rule"="OUTLOOK.EXE"
-        "SV-91943r2_rule"="POWERPNT.EXE"
-        "SV-91945r2_rule"="PPTVIEW.EXE"
-        "SV-91951r2_rule"="VISIO.EXE"
-        "SV-91955r2_rule"="VPREVIEW.EXE"
-        "SV-91959r2_rule"="WINWORD.EXE"
-    }
-
-    #BlockRemoteImageLoads: ON
-    $ApplicationMitigationsImageLoad = @{
-        "SV-91905r2_rule"="FLTLDR.EXE"
-         "SV-91909r2_rule"="GROOVE.EXE"
-         "SV-91931r2_rule"="OneDrive.exe"
-    }
-
-    #Payload All options: ON
-    $ApplicationMitigationsAllPayload = @{
-        "SV-91885r2_rule:"="Acrobat.exe"
-        "SV-91887r2_rule"="AcroRd32.exe"
-        "SV-91891r2_rule"="chrome.exe"
-        "SV-91901r2_rule"="firefox.exe"
-        "SV-91897r2_rule"="EXCEL.EXE"
-        "SV-91905r2_rule"="FLTLDR.EXE"
-        "SV-91909r2_rule"="GROOVE.EXE"
-        "SV-91913r2_rule"="iexplore.exe"
-        "SV-91917r2_rule"="INFOPATH.EXE"
-        "SV-91919r2_rule Part 1"="java.exe"
-        "SV-91919r2_rule Part 2"="javaw.exe"
-        "SV-91919r2_rule Part 3"="javaws.exe"
-        "SV-91923r2_rule"="lync.exe"
-        "SV-91927r2_rule"="MSACCESS.EXE"
-        "SV-91929r2_rule"="MSPUB.EXE"
-        "SV-91935r2_rule"="OIS.EXE"
-        "SV-91931r2_rule"="OneDrive.exe"
-        "SV-91939r2_rule"="OUTLOOK.EXE"
-        "SV-91941r2_rule"="plugin-container.exe"
-        "SV-91943r2_rule"="POWERPNT.EXE"
-        "SV-91945r2_rule"="PPTVIEW.EXE"
-        "SV-91951r2_rule"="VISIO.EXE"
-        "SV-91955r2_rule"="VPREVIEW.EXE"
-        "SV-91959r2_rule"="WINWORD.EXE"
-        "SV-91965r2_rule"="wordpad.exe"
-    }
-
-    #EnableRopStackPivot: ON
-    #EnableRopCallerCheck: ON
-    #EnableRopSimExec: ON
-    $ApplicationMitigationsPayloadROP = @{
-        "SV-91963r2_rule"="wmplayer.exe"
-    }
+        Write-LogEntry "Applying STIG Rule ID: SV-91799r3_rule :: Enabling Validate heap integrity for exploit protection..." -Severity 1 -Outhost
+        If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
+            Set-Processmitigation -System -Enable TerminateOnError
+        }
 
 
-    #DisallowChildProcessCreation: ON
-    $ApplicationMitigationsChild = @{
-        "SV-91905r2_rule"="FLTLDR.EXE"
-         "SV-91909r2_rule"="GROOVE.EXE"
-    }
+        #DEP: ON
+        $ApplicationMitigationsDep = @{
+            "SV-91885r2_rule:"="Acrobat.exe"
+            "SV-91887r2_rule"="AcroRd32.exe"
+            "SV-91897r2_rule"="EXCEL.EXE"
+            "SV-91901r2_rule"="firefox.exe"
+            "SV-91891r2_rule"="chrome.exe"
+            "SV-91905r2_rule"="FLTLDR.EXE"
+            "SV-91909r2_rule"="GROOVE.EXE"
+            "SV-91913r2_rule"="iexplore.exe"
+            "SV-91917r2_rule"="INFOPATH.EXE"
+            "SV-91919r2_rule Part 1"="java.exe"
+            "SV-91919r2_rule Part 2"="javaw.exe"
+            "SV-91919r2_rule Part 3"="javaws.exe"
+            "SV-91923r2_rule"="lync.exe"
+            "SV-91927r2_rule"="MSACCESS.EXE"
+            "SV-91929r2_rule"="MSPUB.EXE"
+            "SV-91935r2_rule"="OIS.EXE"
+            "SV-91931r2_rule"="OneDrive.exe"
+            "SV-91939r2_rule"="OUTLOOK.EXE"
+            "SV-91941r2_rule"="plugin-container.exe"
+            "SV-91943r2_rule"="POWERPNT.EXE"
+            "SV-91945r2_rule"="PPTVIEW.EXE"
+            "SV-91951r2_rule"="VISIO.EXE"
+            "SV-91955r2_rule"="VPREVIEW.EXE"
+            "SV-91959r2_rule"="WINWORD.EXE"
+            "SV-91963r2_rule"="wmplayer.exe"
+            "SV-91965r2_rule"="wordpad.exe"
+        }
 
-    Foreach ($Mitigation in $ApplicationMitigationsDep.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DEP : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
-        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
-            Set-ProcessMitigation $Mitigation.Value -enable DEP
+        #ASLR: BottomUp: ON
+        $ApplicationMitigationsASLR_BU = @{
+            "SV-91885r2_rule:"="Acrobat.exe"
+            "SV-91887r2_rule"="AcroRd32.exe"
+            "SV-91901r2_rule"="firefox.exe"
+            "SV-91913r2_rule"="iexplore.exe"
+        }
+
+        #ASLR: ForceRelocateImages: ON
+        $ApplicationMitigationsASLR_FRI = @{
+            "SV-91885r2_rule:"="Acrobat.exe"
+            "SV-91887r2_rule"="AcroRd32.exe"
+            "SV-91901r2_rule"="firefox.exe"
+            "SV-91897r2_rule"="EXCEL.EXE"
+            "SV-91913r2_rule"="iexplore.exe"
+            "SV-91917r2_rule"="INFOPATH.EXE"
+            "SV-91923r2_rule"="lync.exe"
+            "SV-91927r2_rule"="MSACCESS.EXE"
+            "SV-91929r2_rule"="MSPUB.EXE"
+            "SV-91931r2_rule"="OneDrive.exe"
+            "SV-91939r2_rule"="OUTLOOK.EXE"
+            "SV-91943r2_rule"="POWERPNT.EXE"
+            "SV-91945r2_rule"="PPTVIEW.EXE"
+            "SV-91951r2_rule"="VISIO.EXE"
+            "SV-91955r2_rule"="VPREVIEW.EXE"
+            "SV-91959r2_rule"="WINWORD.EXE"
+        }
+
+        #BlockRemoteImageLoads: ON
+        $ApplicationMitigationsImageLoad = @{
+            "SV-91905r2_rule"="FLTLDR.EXE"
+             "SV-91909r2_rule"="GROOVE.EXE"
+             "SV-91931r2_rule"="OneDrive.exe"
+        }
+
+        #Payload All options: ON
+        $ApplicationMitigationsAllPayload = @{
+            "SV-91885r2_rule:"="Acrobat.exe"
+            "SV-91887r2_rule"="AcroRd32.exe"
+            "SV-91891r2_rule"="chrome.exe"
+            "SV-91901r2_rule"="firefox.exe"
+            "SV-91897r2_rule"="EXCEL.EXE"
+            "SV-91905r2_rule"="FLTLDR.EXE"
+            "SV-91909r2_rule"="GROOVE.EXE"
+            "SV-91913r2_rule"="iexplore.exe"
+            "SV-91917r2_rule"="INFOPATH.EXE"
+            "SV-91919r2_rule Part 1"="java.exe"
+            "SV-91919r2_rule Part 2"="javaw.exe"
+            "SV-91919r2_rule Part 3"="javaws.exe"
+            "SV-91923r2_rule"="lync.exe"
+            "SV-91927r2_rule"="MSACCESS.EXE"
+            "SV-91929r2_rule"="MSPUB.EXE"
+            "SV-91935r2_rule"="OIS.EXE"
+            "SV-91931r2_rule"="OneDrive.exe"
+            "SV-91939r2_rule"="OUTLOOK.EXE"
+            "SV-91941r2_rule"="plugin-container.exe"
+            "SV-91943r2_rule"="POWERPNT.EXE"
+            "SV-91945r2_rule"="PPTVIEW.EXE"
+            "SV-91951r2_rule"="VISIO.EXE"
+            "SV-91955r2_rule"="VPREVIEW.EXE"
+            "SV-91959r2_rule"="WINWORD.EXE"
+            "SV-91965r2_rule"="wordpad.exe"
+        }
+
+        #EnableRopStackPivot: ON
+        #EnableRopCallerCheck: ON
+        #EnableRopSimExec: ON
+        $ApplicationMitigationsPayloadROP = @{
+            "SV-91963r2_rule"="wmplayer.exe"
+        }
+
+
+        #DisallowChildProcessCreation: ON
+        $ApplicationMitigationsChild = @{
+            "SV-91905r2_rule"="FLTLDR.EXE"
+             "SV-91909r2_rule"="GROOVE.EXE"
+        }
+
+        Foreach ($Mitigation in $ApplicationMitigationsDep.GetEnumerator()){
+            Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DEP : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+            If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+                Set-ProcessMitigation $Mitigation.Value -enable DEP
+            }
+        }
+
+        Foreach ($Mitigation in $ApplicationMitigationsASLR_BU.GetEnumerator()){
+            Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:BottomUp : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+            If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+                Set-ProcessMitigation $Mitigation.Value -enable BottomUp
+            }
+        }
+
+        Foreach ($Mitigation in $ApplicationMitigationsASLR_FRI.GetEnumerator()){
+            Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:ForceRelocateImages : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+            If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+                Set-ProcessMitigation $Mitigation.Value -enable ForceRelocateImages
+            }
+        }
+
+        Foreach ($Mitigation in $ApplicationMitigationsImageLoad.GetEnumerator()){
+            Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [BlockRemoteImageLoads : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+            If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+                Set-ProcessMitigation $Mitigation.Value -enable BlockRemoteImageLoads
+            }
+        }
+
+        Foreach ($Mitigation in $ApplicationMitigationsAllPayload.GetEnumerator()){
+            Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation[Payload:Export & Rop* : ON] options for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+            If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+                Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilter
+                Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilterPlus
+                Set-ProcessMitigation $Mitigation.Value -enable EnableImportAddressFilter
+                Set-ProcessMitigation $Mitigation.Value -enable EnableRopStackPivot
+                Set-ProcessMitigation $Mitigation.Value -enable EnableRopCallerCheck
+                Set-ProcessMitigation $Mitigation.Value -enable EnableRopSimExec
+            }
+        }
+
+        Foreach ($Mitigation in $ApplicationMitigationsPayloadROP.GetEnumerator()){
+            Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [Payload:Rop* : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+            If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+                Set-ProcessMitigation $Mitigation.Value -enable EnableRopStackPivot
+                Set-ProcessMitigation $Mitigation.Value -enable EnableRopCallerCheck
+                Set-ProcessMitigation $Mitigation.Value -enable EnableRopSimExec
+            }
+        }
+
+        Foreach ($Mitigation in $ApplicationMitigationsChild.GetEnumerator()){
+            Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DisallowChildProcessCreation : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
+            If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
+                Set-ProcessMitigation $Mitigation.Value -enable DisallowChildProcessCreation
+            }
         }
     }
-
-    Foreach ($Mitigation in $ApplicationMitigationsASLR_BU.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:BottomUp : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
-        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
-            Set-ProcessMitigation $Mitigation.Value -enable BottomUp
-        }
-    }
-
-    Foreach ($Mitigation in $ApplicationMitigationsASLR_FRI.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:ForceRelocateImages : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
-        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
-            Set-ProcessMitigation $Mitigation.Value -enable ForceRelocateImages
-        }
-    }
-
-    Foreach ($Mitigation in $ApplicationMitigationsImageLoad.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [BlockRemoteImageLoads : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
-        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
-            Set-ProcessMitigation $Mitigation.Value -enable BlockRemoteImageLoads
-        }
-    }
-
-    Foreach ($Mitigation in $ApplicationMitigationsAllPayload.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation[Payload:Export & Rop* : ON] options for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
-        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
-            Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilter
-            Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilterPlus
-            Set-ProcessMitigation $Mitigation.Value -enable EnableImportAddressFilter
-            Set-ProcessMitigation $Mitigation.Value -enable EnableRopStackPivot
-            Set-ProcessMitigation $Mitigation.Value -enable EnableRopCallerCheck
-            Set-ProcessMitigation $Mitigation.Value -enable EnableRopSimExec
-        }
-    }
-
-    Foreach ($Mitigation in $ApplicationMitigationsPayloadROP.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [Payload:Rop* : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
-        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
-            Set-ProcessMitigation $Mitigation.Value -enable EnableRopStackPivot
-            Set-ProcessMitigation $Mitigation.Value -enable EnableRopCallerCheck
-            Set-ProcessMitigation $Mitigation.Value -enable EnableRopSimExec
-        }
-    }
-
-    Foreach ($Mitigation in $ApplicationMitigationsChild.GetEnumerator()){
-        Write-LogEntry ("Applying STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DisallowChildProcessCreation : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value) -Severity 1 -Outhost
-        If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
-            Set-ProcessMitigation $Mitigation.Value -enable DisallowChildProcessCreation
-        }
+    Else{
+        Write-LogEntry ("Unable to process mitigations due to OS version [{0}]. Please upgrade or install EMET" -f $OSBuildNumber) -Severity 1 -Outhost      
     }
 }
