@@ -4,12 +4,13 @@
 	 Originally Created by:   	Anton Romanyuk
      Added more capibilities:   Richard Tracy
 	 Filename:     	            Win10OptimizeAndConfig.ps1
-     Last Updated:              02/06/2019
+     Last Updated:              02/08/2019
      Thanks to:                 unixuser011,W4RH4WK
 	===========================================================================
 	.DESCRIPTION
 		Applies Windows 10 Optimizations and configurations. Supports VDI optmizations
-        Utilizes LGPO.exe to apply group policy item where neceassary. 
+        Utilizes LGPO.exe to apply group policy item where neceassary.
+        Applies DISA stigs for Windows 10 
         Utilizes MDT/SCCM TaskSequence variables:
            _SMSTSLogPath
 
@@ -690,9 +691,10 @@ If($DisableScript){
 #$VerbosePreference = 'SilentlyContinue'
 $VerbosePreference = 'Continue'
 
-$FindLGPO = (Get-ChildItem $Global:LGPOPath -Filter LGPO.exe).FullName
-If(Test-Path $FindLGPO){
-    $Global:LGPOPath = $FindLGPO
+#check if LGPO file exists in Tools directory or Specified LGPOPath
+$FindLGPO = Get-ChildItem $Global:LGPOPath -Filter LGPO.exe -ErrorAction SilentlyContinue
+If($FindLGPO){
+    $Global:LGPOPath = $FindLGPO.FullName
 }
 Else{
     $Global:LGPOForConfigs = $false
@@ -723,9 +725,12 @@ If ($InstallPSModules)
 
 
     If($InstallModulesPath.count -gt 0){
+        $i = 1
         Write-LogEntry "Installing PowerShell Modules..." -Severity 1 -Outhost
         Foreach($module in $InstallModulesPath){
            Import-Module -name $module.FullName -Global -NoClobber -Force | Out-Null
+           Write-Progress -Activity "Installing PowerShell Module..." -Status $module.FullName -PercentComplete ($i / $InstallModulesPath.count * 100)
+           $i++
         }
     }
 
