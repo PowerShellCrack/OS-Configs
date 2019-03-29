@@ -835,13 +835,13 @@ If($DisableFeedback){
 
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Siuf\Rules" -Name NumberOfSIUFInPeriod -Type DWord -Value 0 -Force | Out-Null
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Siuf\Rules" -Name PeriodInNanoSeconds -Type DWord -Value 0 -Forcee | Out-Null
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -1017,13 +1017,13 @@ If ($DisableAutoRun)
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -1089,13 +1089,12 @@ If ($DisableOneDrive)
     
             Write-LogEntry ("Removing Onedrive [{0}] for User [{1}]..." -f $key.Value,$UserID) -Outhost
             Remove-Itemproperty -Path $settingspath -Name 'OneDriveSetup' -ErrorAction SilentlyContinue | Out-Null  
-            Start-Sleep 1
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -1193,8 +1192,7 @@ If($DisableAllNotifications)
 
                 Write-LogEntry ("Disabling Toast notifications to the lock screen for user: {0}" -f $UserProfile.SID) -Severity 1 -Outhost
                 Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name NoToastApplicationNotificationOnLockScreen -Type DWord -Value '1' -Force
-   
-                Start-Sleep 1
+
                 $i++
             }
         }
@@ -1202,7 +1200,7 @@ If($DisableAllNotifications)
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -1288,7 +1286,7 @@ If($RemoveActiveSetupComponents){
             Remove-ItemProperty -Path ('HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\' + $key.Key) -Name 'StubPath' -Force -ErrorAction SilentlyContinue | Out-Null
         }
         
-        Start-Sleep 1
+        Start-Sleep -Seconds 10
         $i++
     }
 
@@ -1336,7 +1334,7 @@ If ($DisabledUnusedFeatures)
             Write-LogEntry ("Unable to Remove {0} Feature: {1}" -f $FeatName,$_) -Severity 3 -Outhost
         }
 
-        Start-Sleep 1
+        Start-Sleep -Seconds 10
         $i++
             
     }
@@ -1452,7 +1450,7 @@ If ($DisabledUnusedServices)
                 Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
             }
 
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             $i++
             
         }
@@ -1534,7 +1532,7 @@ If ($DisableInternetServices -and $OptimizeForVDI)
             Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
         }
 
-        Start-Sleep 1
+        Start-Sleep -Seconds 10
         $i++
     }
 
@@ -1569,7 +1567,7 @@ If($DisableSmartCardLogon){
             Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
         }
 
-        Start-Sleep 1
+        Start-Sleep -Seconds 10
         $i++
     }
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'SCForeOption' -Type DWord -Value '0' -Force -TryLGPO:$true 
@@ -1620,7 +1618,7 @@ If ($DisableDefender)
             Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
         }
         
-        Start-Sleep 1
+        Start-Sleep -Seconds 10
         $i++
     }
 }
@@ -2226,13 +2224,12 @@ If ($OptimizeForVDI)
             Write-LogEntry ("VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows for User: {0}..." -f $UserID) -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
 
-            Start-Sleep 1
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -2421,14 +2418,12 @@ If($EnableVisualPerformance)
             
             Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on Network Folders for User: {0}..." -f $UserID) -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbsDBOnNetworkFolders" -Type DWord -Value 1 -Force
-            
-            Start-Sleep 1
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -2472,13 +2467,12 @@ If($EnableNumlockStartup)
         If ($HiveLoaded -eq $true) {
             Write-LogEntry  ("Enabing Num lock for  for User: {0}..." -f $UserID) -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Keyboard" -Name InitialKeyboardIndicators -Value 2147483650 -Type DWord -Force
-            Start-Sleep 1
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -2552,13 +2546,12 @@ If($ShowThisPCOnDesktop)
             Write-LogEntry ("Enabling 'This PC' shortcut on desktop for User: {0}..." -f $UserID) -Outhost
             #Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" -Value 0 -Type DWord -Force
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" -Type DWord -Value 0 -Force
-            Start-Sleep 1
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -2591,13 +2584,12 @@ If($ShowUserFolderOnDesktop)
             Write-LogEntry ("Enabling 'User Folder' shortcut on desktop for User: {0}..." -f $UserID) -Outhost
             #Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" -Value 0 -Type DWord -Force
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" -Type DWord -Value 0 -Force
-            Start-Sleep 1
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
@@ -2630,13 +2622,12 @@ If($RemoveRecycleBinOnDesktop)
             Write-LogEntry ("Removing 'Recycle Bin' shortcut on desktop for User: {0}..." -f $UserID) -Outhost
             #Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{645FF040-5081-101B-9F08-00AA002F954E}" -Type DWord -Value 1 -Force
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{645FF040-5081-101B-9F08-00AA002F954E}" -Type DWord -Value 1 -Force
-            Start-Sleep 1
         }
 
         #remove any leftove reg process and then remove hive
         If ($HiveLoaded -eq $true) {
             [gc]::Collect()
-            Start-Sleep 1
+            Start-Sleep -Seconds 10
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
