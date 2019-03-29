@@ -53,6 +53,7 @@ Function Format-DatePrefix{
 }
 
 Function Write-LogEntry{
+    [CmdletBinding()] 
     param(
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
         [ValidateNotNullOrEmpty()]

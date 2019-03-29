@@ -4,8 +4,8 @@
 	 Originally Created by:   	Anton Romanyuk
      Added more capibilities:   Richard Tracy
 	 Filename:     	            Win10OptimizeAndConfig.ps1
-     Last Updated:              03/08/2019
-     Thanks to:                 unixuser011,W4RH4WK
+     Last Updated:              03/29/2019
+     Thanks to:                 unixuser011,W4RH4WK,TheVDIGuys
 	===========================================================================
 	.DESCRIPTION
 		Applies Windows 10 Optimizations and configurations. Supports VDI optmizations
@@ -81,6 +81,7 @@
             CFG_DisableActionCenter
             CFG_DisableFeedback
             CFG_DisableWindowsUpgrades
+            CFG_DisableSmartCardLogon
     
     . EXAMPLE
         #Copy this to MDT CustomSettings.ini
@@ -92,7 +93,7 @@
         CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_EnableSecureLogon,CFG_HideDrives,CFG_DisableAllNotifications,
         CFG_InstallPSModules,CFG_EnableVisualPerformance,CFG_EnableDarkTheme,CFG_EnableNumlockStartup,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,
         CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,SCCMSiteServer,AppVolMgrServer,AdminMenuConfigPath,CFG_SetSmartScreenFilter,CFG_EnableStrictUAC,
-        CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades
+        CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades,CFG_DisableSmartCardLogon
 
         Then add each option to a priority specifically for your use, like:
         [Default]
@@ -104,6 +105,9 @@
         CFG_CleanSampleFolders=True
         ...
 
+    .LINKS
+
+        https://github.com/TheVDIGuys/W10_1803_VDI_Optimize
 #> 
 
 
@@ -128,6 +132,7 @@ Function Format-DatePrefix{
 }
 
 Function Write-LogEntry{
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
         [ValidateNotNullOrEmpty()]
@@ -664,6 +669,7 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$DisableActionCenter = $false
 [boolean]$DisableFeedback = $false
 [boolean]$DisableWindowsUpgrades = $false
+[boolean]$DisableSmartCardLogon = $false
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
@@ -735,6 +741,7 @@ If($tsenv){
     If($tsenv:CFG_DisableActionCenter){[boolean]$DisableActionCenter = [boolean]::Parse($tsenv.Value("CFG_DisableActionCenter"))}
     If($tsenv:CFG_DisableFeedback){[boolean]$DisableFeedback = [boolean]::Parse($tsenv.Value("CFG_DisableFeedback"))}
     If($tsenv:CFG_DisableWindowsUpgrades){[boolean]$DisableWindowsUpgrades = [boolean]::Parse($tsenv.Value("CFG_DisableWindowsUpgrades"))}
+    If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
@@ -1041,7 +1048,7 @@ If ($EnableRDP)
 
 If ($DisableOneDrive)
 {
-	Write-LogEntry "Turning off OneDrive..." -Severity 1 -Outhost
+    Write-LogEntry "Turning off OneDrive..." -Severity 1 -Outhost
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisableFileSync' -Type DWord -Value '1' -Force -TryLGPO:$true
 	
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:50] :: "}
@@ -1094,6 +1101,23 @@ If ($DisableOneDrive)
         $p++
     }
 
+    # Kill the OneDrive.exe and Explorer.exe processes
+    Get-Process OneDrive -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process explorer -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+    #uninstall  OneDrive
+    if (Test-Path "C:\Windows\System32\OneDriveSetup.exe"){
+        Start-Process "C:\Windows\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait
+    }
+
+    if (Test-Path "C:\Windows\SysWOW64\OneDriveSetup.exe"){
+        Start-Process "C:\Windows\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait
+    }
+    Start-Process -FilePath "$env:Windir\Explorer.exe" -Wait -ErrorAction SilentlyContinue
+
+    # remove OneDrive shortcuts
+    Remove-Item -Path "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk" -Force
+    Remove-Item -Path "C:\Windows\ServiceProfiles\NetworkService\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk" -Force
 }
 Else{
     #Write-LogEntry "STIG Rule ID: SV-98853r1_rule :: Allowing OneDrive synchronizing of accounts for DoD organization..." -Severity 1 -Outhost
@@ -1327,90 +1351,80 @@ If ($DisabledUnusedServices)
 {
     
     $services = [ordered]@{
-        "HomeGroupListener"="152:HomeGroup Listener Services"
-        "HomeGroupProvider"="153:HomeGroup Provider Services"
+        HomeGroupListener="152:HomeGroup Listener Services"
+        HomeGroupProvider="153:HomeGroup Provider Services"
+        RetailDemo="172:Retail Demo"
     }
 
     #disable more services for VDI
     If($OptimizeForVDI){
         $services = $services + @{
-            "AJRouter"="135:AJRouter Router"
-            "ALG"="136:Application Layer Gateway"
-            "BITS"="137:Background Intelligent Transfer"
-            "wbengine"="138:Block Level Backup Engine"
-            "bthserv"="139:Bluetooth Support"
-            "BDESVC"="140:Bitlocker Drive Encryption"
-            "Browser"="141:Computer Browser"
-            "PeerDistSvc"="142:BranchCache"
-            #"DeviceAssociationService"="143:Device Association"
-            "DsmSvc"="144:Device Setup Manager"
-            #"DPS"="145:Diagnostic Policy"
-            "WdiServiceHost"="146:Diagnostic Service Host"
-            "WdiSystemHost"="147:Diagnostic System Host"
-            "DiagTrack"="148:Diagnostics Tracking"
-            "Fax"="149:Fax"
-            "fdPHost"="150:Function Discovery Provider Host"
-            "FDResPub"="151:Function Discovery Resource Publication"
-            "vmickvpexchange"="154:Hyper-V Data Exchange"
-            "vmicguestinterface"="155:Hyper-V Guest Service Interface"
-            "vmicshutdown"="156:Hyper-V Guest Shutdown"
-            "vmicheartbeat"="157:Hyper-V Heartbeat"
-            "vmicrdv"="158:Hyper-V Remote Desktop Virtualization"
-            "vmictimesync"="159:Hyper-V Time Synchronization"
-            "vmicvmsession"="160:Hyper-V VM Session"
-            "vmicvss"="161:Hyper-V Volume Shadow Copy Requestor"
-            "UI0Detect"="162:Interactive Services Detection"
-            "SharedAccess"="163:Internet Connection Sharing (ICS)"
-            "iphlpsvc"="164:IP Helper"
-            "MSiSCSI"="165:Microsoft iSCSI Initiator"
-            "swprv"="166:Microsoft Software Shadow Copy Provider"
-            "CscService"="167:Offline Files"
-            "defragsvc"="168:Drive Optimization Capabilities"
-            "PcaSvc"="169:Program Compatibility Assistant"
-            "QWAVE"="170:Quality Windows Audio Video Experience"
-            "wercplsupport"="171:Reports and Solutions Control Panel Support"
-            "RetailDemo"="172:Retail Demo"
-            "SstpSvc"="173:Secure Socket Tunneling Protocol"
-            "wscsvc"="174:Security Center"
-            "SensorDataService"="175:Sensor Data"
-            "SensrSvc"="176:Sensor Monitoring"
-            "SensorService"="177:Sensor"
-            #"ShellHWDetection"="178:Shell Hardware Detection"
-            "SNMPTRAP"="179:SNMP Trap"
-            "svsvc"="180:Spot Verifier"
-            "SSDPSRV"="181:SSDP Discovery"
-            "WiaRpc"="182:Still Image Acquisition Events"
-            "StorSvc"="183:Store Storage"
-            "SysMain"="184:Superfetch"
-            "TapiSrv"="185:Telephony"
-            "Themes"="186:Themes"
-            #"upnphost"="187:Universal PnP Host"
-            "VSS"="188:Volume Shadow Copy"
-            "SDRSVC"="189:Windows Backup"
-            "WcsPlugInService"="180:Windows Color System"
-            "wcncsvc"="191:Windows Connect Now – Config Registrar"
-            "WerSvc"="192:Windows Error Reporting"
-            "WMPNetworkSvc"="193:Windows Media Center Network Sharing"
-            "icssvc"="194:Windows Mobile Hotspot"
-            "WSearch"="195:Windows Search"
-            #"wuauserv"="196:Windows Update"
-            "Wlansvc"="197:WLAN AutoConfig"
-            "WwanSvc"="198:WWAN AutoConfig"
-            "WbioSrvc"="298:Biometric"
-            "AppIDSvc"="299:Identity of an Application"
-            "diagnosticshub.standardcollector.service"="300:Diagnostics Hub"
-            "DcpSvc"="301:Data Collection and Publishing"
-            "DoSvc"="302:Delivery Optimization"
-            "EFS"="303:Encrypting File System"
-            "Eaphost"="304:Extensible Authentication Protocol"
-            "MapsBroker"="305:Maps Manager"
-            "dmwappushsvc"="306:WAP Push Messages"
-            "BthHFSrv"="307:Wireless Bluetooth Headsets"
-            "lfsvc"="308:Geolocation"
-            "TabletInputService"="310:Keyboard and Handwriting Panel"
-            "stisvc"="311:Windows Image Acquisition (WIA)"
-            "NlaSvc"="Network Location Awareness"
-            #"Audiosrv"="Audio"
+            AJRouter="135:AJRouter Router"
+            ALG="136:Application Layer Gateway"
+            BITS="137:Background Intelligent Transfer"
+            wbengine="138:Block Level Backup Engine"
+            bthserv="139:Bluetooth Support"
+            BthHFSrv="307:Wireless Bluetooth Headsets"
+            BDESVC="140:Bitlocker Drive Encryption"
+            Browser="141:Computer Browser"
+            PeerDistSvc="142:BranchCache"
+            #DeviceAssociationService="143:Device Association"
+            DsmSvc="144:Device Setup Manager"
+            DPS="145:Diagnostic Policy"
+            WdiServiceHost="146:Diagnostic Service Host"
+            WdiSystemHost="147:Diagnostic System Host"
+            DiagTrack="148:Diagnostics Tracking"
+            Fax="149:Fax"
+            fdPHost="150:Function Discovery Provider Host"
+            FDResPub="151:Function Discovery Resource Publication"
+            vmickvpexchange="154:Hyper-V Data Exchange"
+            vmicguestinterface="155:Hyper-V Guest Service Interface"
+            vmicshutdown="156:Hyper-V Guest Shutdown"
+            vmicheartbeat="157:Hyper-V Heartbeat"
+            vmicrdv="158:Hyper-V Remote Desktop Virtualization"
+            vmictimesync="159:Hyper-V Time Synchronization"
+            vmicvmsession="160:Hyper-V VM Session"
+            vmicvss="161:Hyper-V Volume Shadow Copy Requestor"
+            UI0Detect="162:Interactive Services Detection"
+            SharedAccess="163:Internet Connection Sharing (ICS)"
+            iphlpsvc="164:IP Helper"
+            MSiSCSI="165:Microsoft iSCSI Initiator"
+            swprv="166:Microsoft Software Shadow Copy Provider"
+            CscService="167:Offline Files"
+            defragsvc="168:Drive Optimization Capabilities"
+            PcaSvc="169:Program Compatibility Assistant"
+            QWAVE="170:Quality Windows Audio Video Experience"
+            wercplsupport="171:Reports and Solutions Control Panel Support" 
+            SstpSvc="173:Secure Socket Tunneling Protocol"
+            wscsvc="174:Security Center"
+            #"ShellHWDetection="178:Shell Hardware Detection"
+            SNMPTRAP="179:SNMP Trap"
+            svsvc="180:Spot Verifier"
+            SSDPSRV="181:SSDP Discovery"
+            WiaRpc="182:Still Image Acquisition Events"
+            StorSvc="183:Store Storage"
+            SysMain="184:Superfetch"
+            TapiSrv="185:Telephony"
+            Themes="186:Themes"
+            #upnphost="187:Universal PnP Host"
+            VSS="188:Volume Shadow Copy"
+            SDRSVC="189:Windows Backup"
+            WcsPlugInService="180:Windows Color System"
+            wcncsvc="191:Windows Connect Now – Config Registrar"
+            #WSearch="195:Windows Search"
+            #wuauserv="196:Windows Update"
+            Wlansvc="197:WLAN AutoConfig"
+            WwanSvc="198:WWAN AutoConfig"
+            WbioSrvc="298:Biometric"
+            AppIDSvc="299:Identity of an Application"
+            'diagnosticshub.standardcollector.service'="300:Diagnostics Hub"
+            DoSvc="302:Delivery Optimization"
+            EFS="303:Encrypting File System"
+            Eaphost="304:Extensible Authentication Protocol"
+            stisvc="311:Windows Image Acquisition (WIA)"
+            NlaSvc="Network Location Awareness"
+            #"Audiosrv="Audio"
+            PimIndexMaintenanceSvc="Contact Data"
         }
         $i = 1
 
@@ -1444,22 +1458,58 @@ If ($DisabledUnusedServices)
         }
 
     }
+
+    #detect if system is a tablet
+    #if not disable tablet service
+    Add-Type @"
+using System.Runtime.InteropServices;
+namespace WinAPI
+{	
+    public class User32 { 
+    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int nIndex); }
+}
+"@
+
+    if (-not($Result = [WinAPI.User32]::GetSystemMetrics(86) -band 0x41 -eq 0x41) ) {
+        Try{
+            Set-Service TabletInputService -StartupType Disabled -ComputerName $env:COMPUTERNAME -ErrorAction Stop
+        }
+        Catch [System.Management.Automation.ActionPreferenceStopException]{
+            Write-LogEntry ("Unable to disable Tablet Service: {0}" -f $_) -Severity 3 -Outhost
+        }
+    }
+
 }
 
 
 # Disable Services
-If ($DisableInternetServices)
+If ($DisableInternetServices -and $OptimizeForVDI)
 {
     $services = [ordered]@{
-        "XblAuthManager"="199:Xbox Live Auth Manager"
-        "XblGameSave"="200:Xbox Live Game Save"
-        "XboxNetApiSvc"="201:Xbox Live Networking"
-        "wlidsvc"="309:Microsoft Account Sign-in Assistant"
-        "WerSvc"="Windows Error Reporting"
-        "XboxGipSvc"="Xbox Accessory Management"
-        "WMPNetworkSvc"="Windows Mediaplayer Sharing"
-        "DiagTrack"="Diagnostic Tracking"
-        "dmwappushservice"="WAP Push"
+        XblAuthManager="199:Xbox Live Auth Manager"
+        XblGameSave="200:Xbox Live Game Save"
+        XboxNetApiSvc="201:Xbox Live Networking"
+        XboxGipSvc="Xbox Accessory Management"
+        XboxGip="Xbox Game Input Protocol Driver"
+        BcastDVRUserService="GameDVR and Broadcast User"
+        xbgm="Xbox Game Monitoring"
+        wlidsvc="309:Microsoft Account Sign-in Assistant"
+        WerSvc="Windows Error Reporting"
+        WMPNetworkSvc="Windows Mediaplayer Sharing"
+        DiagTrack="Diagnostic Tracking"
+        dmwappushservice="WAP Push Message Routing Data Collection"
+        MessagingService="WIndows Text Messaging"
+        CDPSvc="Connected Device Platform"
+        CDPUserSvc="Connected Device Platform User"
+        OneSyncSvc="Sync Host"
+        icssvc="194:Windows Mobile Hotspot"
+        DcpSvc="301:Data Collection and Publishing"
+        lfsvc="308:Geolocation"
+        MapsBroker="305:Maps Manager"
+        SensorDataService="175:Sensor Data"
+        SensrSvc="176:Sensor Monitoring"
+        SensorService="177:Sensor"
+        DusmSvc="Data Usage Subscription Management"
     }
     $i = 1
 
@@ -1487,27 +1537,79 @@ If ($DisableInternetServices)
         Start-Sleep 1
         $i++
     }
+
 }
 
+If($DisableSmartCardLogon){
+    $services = [ordered]@{
+        SCardSvr="Smart Card"
+        ScDeviceEnum="Smart Card Device Enumeration Service"
+        SCPolicySvc="Smart Card Removal Policy"
+    }
+    $i = 1
+     
+    Foreach ($key in $services.GetEnumerator()){
+        $ColonSplit = $key.Value -match ":"
+        If($ColonSplit){
+            $OSODID = ($key.Value).split(":")[0]
+            $SvcName = ($key.Value).split(":")[1]
+            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key) -Severity 1 -Outhost
+        }
+        Else{
+            $SvcName = $key.Value
+            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key) -Severity 1 -Outhost
+        }
+
+        Write-Progress -Activity ("Disabling SmartCard Service [{0} of {1}]" -f $i,$services.count) -Status ("Disabling SmartCard Service [{0}]" -f $SvcName) -PercentComplete ($i / $services.count * 100)
+
+        Try{
+            Set-Service $key.Key -StartupType Disabled -ComputerName $env:COMPUTERNAME -ErrorAction Stop
+        }
+        Catch [System.Management.Automation.ActionPreferenceStopException]{
+            Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
+        }
+
+        Start-Sleep 1
+        $i++
+    }
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'SCForeOption' -Type DWord -Value '0' -Force -TryLGPO:$true 
+}
+Else{
+    <#
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'DisplayEmptySmartCardTileWhenNoReader' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'SmartCardCredentialProvider' -Type DWord -Value '1' -Force -TryLGPO:$true  
+    #HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\
+    #ActivClient Provider = {05A69B2E-F05A-426b-BB43-7895A67B1A56}
+    #Microsoft smartcard credential provider = {8FD7E19C-3BF7-489B-A72C-846AB3678C96}
+
+    Write-LogEntry "Configuring Smart Card removal to Force Logoff..." -Severity 1 -Outhost
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force
+    #> 
+}
 
 
 If ($DisableDefender)
 {
     $services = [ordered]@{
-        "Sense"="Windows Defender Advanced Threat Protection"
-        "WdNisSvc"="Windows Defender Antivirus Network Inspection"
-        "SecurityHealthService"="Windows Security"
-        "WinDefend"="Windows Defender Antivirus"
+        Sense="Windows Defender Advanced Threat Protection"
+        WdNisSvc="Windows Defender Antivirus Network Inspection"
+        SecurityHealthService="Windows Security"
+        WinDefend="Windows Defender Antivirus"
 
     }
     $i = 1
 
-    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations :: "}
-
     Foreach ($key in $services.GetEnumerator()){
-
-        $SvcName = $key.Value
-        Write-LogEntry ("{0}Disabling {0} Service [{1}]..." -f $prefixmsg,$SvcName,$key.Key) -Outhost
+        $ColonSplit = $key.Value -match ":"
+        If($ColonSplit){
+            $OSODID = ($key.Value).split(":")[0]
+            $SvcName = ($key.Value).split(":")[1]
+            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key) -Severity 1 -Outhost
+        }
+        Else{
+            $SvcName = $key.Value
+            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key) -Severity 1 -Outhost
+        }
 
         Write-Progress -Activity ("Disabling Defender Service [{0} of {1}]" -f $i,$services.count) -Status $SvcName -PercentComplete ($i / $services.count * 100)
 
@@ -2058,8 +2160,27 @@ If ($OptimizeForVDI)
     Write-LogEntry "VDI Optimizations :: Delete Restore Points for System Restore" -Severity 1 -Outhost
     Start-process vssadmin -ArgumentList 'delete shadows /All /Quiet' -Wait -NoNewWindow | Out-Null
 
-    #Write-LogEntry "Configuring Smart Card removal to Force Logoff..." -Severity 1 -Outhost
-    #Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force
+    
+
+    Write-LogEntry "VDI Optimizations :: Disabling Bootup Trace Loggers" -Severity 1 -Outhost
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\AppModel" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\CloudExperienceHostOOBE" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\DiagLog" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\NtfsLog" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\TileStore" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\UBPM" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiDriverIHVSession" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiSession" -Name Start -Type DWord -Value 0 -Force
+
+    Write-LogEntry "VDI Optimizations :: Configuring LanManWorkstation settings" -Severity 1 -Outhost
+    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DisableBandwidthThrottling" -Type "DWORD" -Value "1" -Force
+    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileInfoCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DirectoryCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileNotFoundCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
+
+    # NIC Advanced Properties performance settings for network biased environments
+    Set-NetAdapterAdvancedProperty -DisplayName "Send Buffer Size" -DisplayValue 4MB
 
     $p = 1
     # Loop through each profile on the machine
@@ -2101,6 +2222,10 @@ If ($OptimizeForVDI)
 
             Write-LogEntry ("VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen for user: {0}" -f $UserID) -Severity 1 -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name NoToastApplicationNotificationOnLockScreen -Type DWord -Value '1' -Force
+
+            Write-LogEntry ("VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows for User: {0}..." -f $UserID) -Outhost
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
+
             Start-Sleep 1
         }
 
@@ -2123,38 +2248,44 @@ If($EnableVisualPerformance)
     #https://github.com/camxct/Win10-Initial-Setup-Script/blob/master/Win10.psm1
     Write-LogEntry "Adjusting visual effects for performance..." -Severity 1 -Outhost
 	
+    Write-LogEntry ("Disabling Checkbox selections on folders and files..." -f $prefixmsg) -Severity 1 -Outhost
+    Set-SystemSettings -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
+
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
-    Write-LogEntry ("Disabling Animate windows when minimizing and maxmizing Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+    Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:84] :: "}
-    Write-LogEntry ("Disabling Animations in the taskbar Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+    Write-LogEntry ("{0}Disabling Animations in the taskbar Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
+    
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:85] :: "}
-    Write-LogEntry ("Disabling Enable Peek Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Enable Peek Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:86] :: "}
-    Write-LogEntry ("Disabling Save taskbar thumbnail previews Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+    Write-LogEntry ("{0}Disabling Save taskbar thumbnail previews Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:87] :: "}
-    Write-LogEntry ("Disabling Show translucent selection rectangle Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+    Write-LogEntry ("{0}Disabling Show translucent selection rectangle Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewAlphaSelect' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:88] :: "}
-    Write-LogEntry ("Disabling Show window contents while dragging Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+    Write-LogEntry ("{0}Disabling Show window contents while dragging Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:89] :: "}
-    Write-LogEntry ("Disabling Smooth edges of screen fonts Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+    Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:90] :: "}
-    Write-LogEntry ("Disabling Use drop shadows for icon labels on the desktop Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
+    Write-LogEntry ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow' -Name 'DefaultValue' -Type DWord -Value '0' -Force
-    
+
     $p = 1
     # Loop through each profile on the machine
     Foreach ($UserProfile in $UserProfiles) {
@@ -2184,6 +2315,58 @@ If($EnableVisualPerformance)
                 Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 3 -Force
             }
 
+            <# Additional Performance changes
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\Themes" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+            #>
+
+
+            Write-LogEntry ("{0}Disabling Checkbox selections on folders and files for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
+            Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:84] :: "}
+            Write-LogEntry ("{0}Disabling Animations in the taskbar Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:85] :: "}
+            Write-LogEntry ("{0}Disabling Enable Peek Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:86] :: "}
+            Write-LogEntry ("{0}Disabling Save taskbar thumbnail previews Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:87] :: "}
+            Write-LogEntry ("{0}Disabling Show translucent selection rectangle Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewAlphaSelect" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:88] :: "}
+            Write-LogEntry ("{0}Disabling Show window contents while dragging Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:89] :: "}
+            Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+
+            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:90] :: "}
+            Write-LogEntry ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    
             If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:73] :: "}
             Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Type String -Value 0 -Force
@@ -2225,13 +2408,20 @@ If($EnableVisualPerformance)
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Desktop" -Name MenuShowDelay -Type DWord -Value 120 -Force
 
 	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Keyboard" -Name "KeyboardDelay" -Type DWord -Value 0 -Force
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Type DWord -Value 1 -Force
+	        
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Type DWord -Value 1 -Force
+            
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Type DWord -Value 0 -Force
+            
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Type DWord -Value 0 -Force
+
             
             Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on local Folders for User: {0}..." -f $UserID) -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbnailCache" -Type DWord -Value 1 -Force
             
             Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on Network Folders for User: {0}..." -f $UserID) -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbsDBOnNetworkFolders" -Type DWord -Value 1 -Force
+            
             Start-Sleep 1
         }
 
