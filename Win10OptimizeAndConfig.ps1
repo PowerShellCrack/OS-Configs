@@ -210,8 +210,6 @@ Function Config-Bluetooth{
 
     ## Get the name of this function
     [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
-
-    If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
     
     Add-Type -AssemblyName System.Runtime.WindowsRuntime
     $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
@@ -233,6 +231,9 @@ Function Config-Bluetooth{
         }
         Catch{
             Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Outhost
+        }
+        Finally{
+            #If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
         }
     }
     Else{
@@ -669,26 +670,26 @@ $ModulesPath = Join-Path -Path $scriptDirectory -ChildPath 'PSModules'
 $BinPath = Join-Path -Path $scriptDirectory -ChildPath 'Bin'
 $FilesPath = Join-Path -Path $scriptDirectory -ChildPath 'Files'
 
+# Get each user profile SID and Path to the profile
+$AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
+
+# Add in the .DEFAULT User Profile
+$DefaultProfile = "" | Select-Object SID, UserHive
+$DefaultProfile.SID = "DEFAULT"
+$DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
+
+#Add it to the UserProfile list
+$UserProfiles = @()
+$UserProfiles += $AllProfiles
+$UserProfiles += $DefaultProfile
+
+#get current users sid
+[string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
+
 #grab all Show-ProgressStatus commands in script and count them
 $script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
 #set counter to one
 $stepCounter = 1
-
-<#
-Try {
-	[string]$moduleToolkitMain = "$ModulesPath\MainExtension.ps1"
-	If (-not (Test-Path -Path $moduleToolkitMain -PathType Leaf)) { Throw "Extension script does not exist at the specified location [$moduleToolkitMain]." }
-    Else{
-        . $moduleToolkitMain 
-        Write-Host "Loading main extension:       $moduleToolkitMain" -ForegroundColor Green
-    }
-}
-Catch {
-	[int32]$mainExitCode = 60008
-	Write-Error -Message "Module [$moduleToolkitMain] failed to load: `n$($_.Exception.Message)`n `n$($_.InvocationInfo.PositionMessage)" -ErrorAction 'Continue'
-	Exit $mainExitCode
-}
-#>
 
 $Global:Verbose = $false
 If($PSBoundParameters.ContainsKey('Debug') -or $PSBoundParameters.ContainsKey('Verbose')){
@@ -1589,7 +1590,7 @@ If ($DisabledUnusedServices)
             If($ColonSplit){
                 $OSODID = ($key.Value).split(":")[0]
                 $SvcName = ($key.Value).split(":")[1]
-                If($OptimizeForVDI){$prefixmsg = ("VDI Optimizations [OSOT ID:{1}] ::" -f $OSODID)}
+                If($OptimizeForVDI){$prefixmsg = ("VDI Optimizations [OSOT ID:{0}] ::" -f $OSODID)}
             }
             Else{
                 $SvcName = $key.Value
@@ -2367,7 +2368,9 @@ If ($OptimizeForVDI)
     Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
 
     # NIC Advanced Properties performance settings for network biased environments
-    Set-NetAdapterAdvancedProperty -DisplayName "Send Buffer Size" -DisplayValue 4MB
+    If(Get-NetAdapterAdvancedProperty -IncludeHidden -DisplayName "Send Buffer Size" -ErrorAction SilentlyContinue){
+        Set-NetAdapterAdvancedProperty -DisplayName "Send Buffer Size" -DisplayValue 4MB
+    }
 
     $p = 1
     # Loop through each profile on the machine
