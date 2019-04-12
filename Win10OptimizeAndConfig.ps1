@@ -82,6 +82,9 @@
             CFG_DisableFeedback
             CFG_DisableWindowsUpgrades
             CFG_DisableSmartCardLogon
+            CFG_DisablePreviewBuild
+            CFG_DisableAppSuggestions
+            CFG_DisableActivityHistory
     
     . EXAMPLE
         #Copy this to MDT CustomSettings.ini
@@ -93,7 +96,8 @@
         CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_EnableSecureLogon,CFG_HideDrives,CFG_DisableAllNotifications,
         CFG_InstallPSModules,CFG_EnableVisualPerformance,CFG_EnableDarkTheme,CFG_EnableNumlockStartup,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,
         CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,SCCMSiteServer,AppVolMgrServer,AdminMenuConfigPath,CFG_SetSmartScreenFilter,CFG_EnableStrictUAC,
-        CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades,CFG_DisableSmartCardLogon
+        CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades,CFG_DisableSmartCardLogon,CFG_DisablePreviewBuild,CFG_DisableAppSuggestions,
+        CFG_DisableActivityHistory
 
         Then add each option to a priority specifically for your use, like:
         [Default]
@@ -780,6 +784,9 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$DisableFeedback = $false
 [boolean]$DisableWindowsUpgrades = $false
 [boolean]$DisableSmartCardLogon = $false
+[boolean]$DisablePreviewBuild = $false
+[boolean]$DisableAppSuggestions = $false
+[boolean]$DisableActivityHistory = $false
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
@@ -852,6 +859,9 @@ If($tsenv){
     If($tsenv:CFG_DisableFeedback){[boolean]$DisableFeedback = [boolean]::Parse($tsenv.Value("CFG_DisableFeedback"))}
     If($tsenv:CFG_DisableWindowsUpgrades){[boolean]$DisableWindowsUpgrades = [boolean]::Parse($tsenv.Value("CFG_DisableWindowsUpgrades"))}
     If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
+    If($tsenv:CFG_DisablePreviewBuild){[boolean]$DisablePreviewBuild = [boolean]::Parse($tsenv.Value("CFG_DisablePreviewBuild"))}
+    If($tsenv:CFG_DisableAppSuggestions){[boolean]$DisableAppSuggestions = [boolean]::Parse($tsenv.Value("CFG_DisableAppSuggestions"))}
+    If($tsenv:CFG_DisableActivityHistory){$DisableActivityHistory = [boolean]::Parse($tsenv.Value("CFG_DisableActivityHistory"))}
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
@@ -967,6 +977,13 @@ If($DisableFeedback)
             Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
         }
         $p++
+
+        Write-LogEntry "Disabling all feedback Scheduled Tasks..." -Severity 1 -Outhost
+        Disable-ScheduledTask -TaskName "Microsoft\Windows\Feedback\Siuf\DmClient" -ErrorAction SilentlyContinue | Out-Null
+	    Disable-ScheduledTask -TaskName "Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload" -ErrorAction SilentlyContinue | Out-Null
+
+        Write-LogEntry "Disabling all feedback notifications..." -Severity 1 -Outhost
+        Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value '1' -Force -TryLGPO:$true
     }
 }
 Else{$stepCounter++}
@@ -1128,6 +1145,7 @@ If ($DisableAutoRun)
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:6] [Optional] :: "}
     Write-LogEntry ("{0}Disabling Devices Auto for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
     Set-SystemSettings -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
+
 
     $p = 1
     # Loop through each profile on the machine
@@ -1783,6 +1801,16 @@ If ($DisableDefender)
         Start-Sleep -Seconds 10
         $i++
     }
+
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Name "DisableAntiSpyware" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Systray" -Name "HideSystray" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" -Name "SpynetReporting" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" -Name "SubmitSamplesConsent" -Type DWord -Value 2 -Force -TryLGPO:$true
+    If ([System.Environment]::OSVersion.Version.Build -eq 14393) {
+		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsDefender" -ErrorAction SilentlyContinue
+	} ElseIf ([System.Environment]::OSVersion.Version.Build -ge 15063) {
+		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "SecurityHealth" -ErrorAction SilentlyContinue
+	}
 }
 Else{$stepCounter++}
 
@@ -1906,6 +1934,45 @@ If ($DisableCortana)
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:42] :: " -f $prefixmsg}
     Write-LogEntry ("{0}Disabling search and Cortana to use location") -Severity 1 -Outhost
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowSearchToUseLocation' -Type DWord -Value '0' -Force -TryLGPO:$true    
+    
+    $p = 1
+    # Loop through each profile on the machine
+    Foreach ($UserProfile in $UserProfiles) {
+        Try{
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
+        }
+        Catch{
+            $UserID = $UserProfile.SID
+        }
+        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Disabling Cortana for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
+
+        #loadhive if not mounted
+        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
+            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
+            $HiveLoaded = $true
+        }
+
+        If ($HiveLoaded -eq $true) {
+            Write-LogEntry ("Disabling Cortana for User: {0}..." -f $UserID) -Outhost
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "CortanaConsent" -Type DWord -Value 0 -Force 
+        
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Personalization\Settings" -Name "AcceptedPrivacyPolicy" -Type DWord -Value 0 -Force 
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitTextCollection" -Type DWord -Value 1 -Force 
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitInkCollection" -Type DWord -Value 1 -Force 
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\InputPersonalization\TrainedDataStore" -Name "HarvestContacts" -Type DWord -Value 0 -Force 
+        }
+
+        #remove any leftove reg process and then remove hive
+        If ($HiveLoaded -eq $true) {
+            [gc]::Collect()
+            Start-Sleep -Seconds 10
+            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
+        }
+        $p++
+    }
+
+    
 }
 Else{$stepCounter++}
 
@@ -1915,7 +1982,7 @@ If($DisableInternetSearch){
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:12] :: "}
     Show-ProgressStatus -Message ("{0}Disabling Bing Search" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'BingSearchEnabled' -Type DWord -Value '0' -Force
+	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'BingSearchEnabled' -Type DWord -Value '0' -Force -TryLGPO:$true
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:47] :: "}
     Write-LogEntry ("Disable search web when searching pc" -f $prefixmsg) -Severity 1 -Outhost
@@ -1924,6 +1991,39 @@ If($DisableInternetSearch){
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:55] :: "}
     Write-LogEntry ("{0}Disabling Web Search in search bar" -f $prefixmsg) -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'DisableWebSearch' -Type DWord -Value '0' -Force -TryLGPO:$true 
+    
+    $p = 1
+    # Loop through each profile on the machine
+    Foreach ($UserProfile in $UserProfiles) {
+        Try{
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
+        }
+        Catch{
+            $UserID = $UserProfile.SID
+        }
+        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Disabling Bing Search for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
+
+        #loadhive if not mounted
+        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
+            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
+            $HiveLoaded = $true
+        }
+
+        If ($HiveLoaded -eq $true) {
+            Write-LogEntry ("Disabling Bing Search for User: {0}..." -f $UserID) -Outhost
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "BingSearchEnabled" -Type DWord -Value 0
+	     }
+
+        #remove any leftove reg process and then remove hive
+        If ($HiveLoaded -eq $true) {
+            [gc]::Collect()
+            Start-Sleep -Seconds 10
+            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
+        }
+        $p++
+    }
+
 }
 Else{$stepCounter++}
 
@@ -1972,6 +2072,7 @@ If ($ApplyPrivacyMitigations)
     Write-LogEntry "Privacy Mitigations :: Disabling Consumer Features..." -Severity 1 -Outhost
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableWindowsConsumerFeatures' -Type DWord -Value '1' -Force -TryLGPO:$true
 
+
     Write-LogEntry "Privacy Mitigations :: Disable the `"how to use Windows`" contextual popups" -Severity 1 -Outhost
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableSoftLanding' -Type DWord -Value '1' -Force -TryLGPO:$true
 
@@ -1981,7 +2082,8 @@ If ($ApplyPrivacyMitigations)
 
 	Write-LogEntry "Privacy Mitigations :: Turning off Automatic Download and Update of Map Data..." -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AutoDownloadAndUpdateMapData' -Type DWord -Value '0' -Force -TryLGPO:$true
-	
+    Set-SystemSettings -Path "HKLM:\SYSTEM\Maps" -Name "AutoUpdateEnabled" -Type DWord -Value 0	-Force
+
 	# Microsoft Edge
 	Write-LogEntry "Privacy Mitigations :: Enabling Do Not Track in Microsoft Edge..." -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'DoNotTrack' -Type DWord -Value '1' -Force -TryLGPO:$true
@@ -1991,12 +2093,16 @@ If ($ApplyPrivacyMitigations)
 	
 	# General stuff
 	Write-LogEntry "Privacy Mitigations :: Turning off the advertising ID..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -Type DWord -Value '0' -Force
-	
+	#Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -Type DWord -Value '0' -Force
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" -Name "DisabledByGroupPolicy" -Type DWord -Value 1 -Force -TryLGPO:$true
+
 	Write-LogEntry "Privacy Mitigations :: Turning off location..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessLocation' -Type DWord -Value '0' -Force
+	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessLocation' -Type DWord -Value '0' -Force -TryLGPO:$true
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors' -Name 'DisableLocation' -Type DWord -Value '0' -Force -TryLGPO:$true
-	
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Name "Value" -Type String -Value "Deny" -Force 
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}" -Name "SensorPermissionState" -Type DWord -Value 0 -Force 
+	Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Services\lfsvc\Service\Configuration" -Name "Status" -Type DWord -Value 0 -Force 
+
 	# Stop getting to know me
 	Write-LogEntry "Privacy Mitigations :: Turning off automatic learning..." -Severity 1 -Outhost
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\InputPersonalization' -Name 'RestrictImplicitInkCollection' -Type DWord -Value '1' -Force -TryLGPO:$true
@@ -2012,10 +2118,11 @@ If ($ApplyPrivacyMitigations)
     Write-LogEntry "Privacy Mitigations :: Disabling WiFi Sense..." -Severity 1 -Outhost
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" -Name "Value" -Type DWord -Value 0 -Force
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" -Name "Value" -Type DWord -Value 0 -Force
-    
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config" -Name "AutoConnectAllowedOEM" -Type DWord -Value 0
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config" -Name "WiFISenseAllowed" -Type DWord -Value 0
+
     Write-LogEntry "Privacy Mitigations :: Disabling all feedback notifications..." -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value '1' -Force -TryLGPO:$true
-
 
     If($OptimizeForVDI){$prefixmsg += "VDI Optimizations [OSOT ID:53] :: "}
 	Write-LogEntry ("Privacy Mitigations :: {0}Disabling telemetry..." -f $prefixmsg) -Outhost
@@ -2028,10 +2135,57 @@ If ($ApplyPrivacyMitigations)
 		$TelemetryLevel = "1"
 		Write-LogEntry "Privacy Mitigations :: Lowest supported telemetry level: Basic." -Severity 1 -Outhost
 	}
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force -TryLGPO:$true
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\Software Protection Platform" -Name "NoGenTicket" -Type DWord -Value 1 -Force -TryLGPO:$true
+
+    $p = 1
+    # Loop through each profile on the machine
+    Foreach ($UserProfile in $UserProfiles) {
+        Try{
+            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
+        }
+        Catch{
+            $UserID = $UserProfile.SID
+        }
+        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Privacy Mitigations Settings for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
+
+
+        #loadhive if not mounted
+        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
+            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
+            $HiveLoaded = $true
+        }
+
+        If ($HiveLoaded -eq $true) {
+            Write-LogEntry ("Privacy Mitigations :: Disabling Tailored Experiences for User: {0}..." -f $UserID) -Outhost
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableTailoredExperiencesWithDiagnosticData" -Type DWord -Value 1 -Force
+        
+            Write-Output "Disabling Website Access to Language List..."
+	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\International\User Profile" -Name "HttpAcceptLanguageOptOut" -Type DWord -Value 1 -Force
+        }
+
+        #remove any leftove reg process and then remove hive
+        If ($HiveLoaded -eq $true) {
+            [gc]::Collect()
+            Start-Sleep -Seconds 10
+            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
+        }
+        $p++
+    }
+
 }
 Else{$stepCounter++}
 
+If($DisablePreviewBuild)
+{
+    Write-LogEntry "Disabling PreviewBuilds capability" -Severity 1 -Outhost
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "AllowBuildPreview" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "EnableConfigFlighting" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "EnableExperimentation" -Type DWord -Value 0 -Force -TryLGPO:$true
+}
 
 If ($EnableWinRM)
 {
@@ -2105,7 +2259,7 @@ If($EnableStrictUAC)
     Write-LogEntry "Enabling UAC for all administrators..." -Severity 1 -Outhost
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Write-LogEntry "FIlter Local administrator account privileged tokens..." -Severity 1 -Outhost
+    Write-LogEntry "Filter Local administrator account privileged tokens..." -Severity 1 -Outhost
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "LocalAccountTokenFilterPolicy" -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Write-LogEntry "Enabling User Account Control approval mode..." -Severity 1 -Outhost
@@ -2150,9 +2304,17 @@ If ($DisableWUP2P -or $OptimizeForVDI)
     If($OptimizeForVDI){$prefixmsg += "VDI Optimizations [OSOT ID:31] :: "}
     Show-ProgressStatus -Message ("{0}Disable P2P WIndows Updates..." -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name DownloadMode -Type DWord -Value '0' -Force
-    
-    #adds windows update back to control panel (permissions ned to be changed)
+    If ([System.Environment]::OSVersion.Version.Build -eq 10240) {
+		# Method used in 1507
+		Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name DownloadMode -Type DWord -Value '1' -Force
+	} ElseIf ([System.Environment]::OSVersion.Version.Build -le 14393) {
+		# Method used in 1511 and 1607
+		Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name DownloadMode -Type DWord -Value '1' -Force -TryLGPO:$true
+	} Else {
+		# Method used since 1703
+		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name "DODownloadMode" -ErrorAction SilentlyContinue
+	}
+    #adds windows update back to control panel (permissions needs to be changed)
     #Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX' -Name IsConvergedUpdateStackEnabled -Type DWord -Value '0' -Force
 }
 Else{$stepCounter++}
@@ -2255,12 +2417,21 @@ If ($OptimizeForVDI)
 {
     Show-ProgressStatus -Message "Configuring VDI Optimizations" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 
+    Write-LogEntry ("VDI Optimizations :: Enabling clearing of recent files on exit...") -Severity 1 -Outhost
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "ClearRecentDocsOnExit" -Type DWord -Value 1 -Force
+    
+    Write-LogEntry ("VDI Optimizations :: Disabling recent files lists...") -Severity 1 -Outhost
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoRecentDocsHistory" -Type DWord -Value 1 -Force
+
     Write-LogEntry "VDI Optimizations [OSOT ID:30] :: Disabling Background Layout Service" -Severity 1 -Outhost
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OptimalLayout" -Name EnableAutoLayout -Type DWord -Value 0 -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:31] :: Disabling CIFS Change Notifications" -Severity 1 -Outhost
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoRemoteRecursiveEvents -Type DWord -Value 0 -Force
     
+    Write-LogEntry ("VDI Optimizations:: Disabling Storage Sense") -Outhost
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense" -Name AllowStorageSenseGlobal -Type DWord -Value 0 -Force -TryLGPO:$true
+
     Write-LogEntry "VDI Optimizations [OSOT ID:32] :: Disabling customer experience improvement program..." -Severity 1 -Outhost
 	Set-SystemSettings -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
 
@@ -2348,8 +2519,6 @@ If ($OptimizeForVDI)
     Write-LogEntry "VDI Optimizations :: Delete Restore Points for System Restore" -Severity 1 -Outhost
     Start-process vssadmin -ArgumentList 'delete shadows /All /Quiet' -Wait -NoNewWindow | Out-Null
 
-    
-
     Write-LogEntry "VDI Optimizations :: Disabling Bootup Trace Loggers" -Severity 1 -Outhost
     Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\AppModel" -Name Start -Type DWord -Value 0 -Force
     Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\CloudExperienceHostOOBE" -Name Start -Type DWord -Value 0 -Force
@@ -2366,6 +2535,8 @@ If ($OptimizeForVDI)
     Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DirectoryCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
     Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileNotFoundCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
     Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
+
+
 
     # NIC Advanced Properties performance settings for network biased environments
     If(Get-NetAdapterAdvancedProperty -IncludeHidden -DisplayName "Send Buffer Size" -ErrorAction SilentlyContinue){
@@ -2399,7 +2570,15 @@ If ($OptimizeForVDI)
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Feeds" -Name SyncStatus -Type DWord -Value 0 -Force
 
             Write-LogEntry ("VDI Optimizations:: Disabling Storage Sense for User: {0}..." -f $UserID) -Outhost
-            Remove-ItemProperty -Path "Registry::HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Recurse -ErrorAction SilentlyContinue
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 01 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 02 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 04 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 08 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 32 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 128 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 256 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 512 -Type DWord -Value 0 -Force
+            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 2048 -Type DWord -Value 0 -Force
 
             Write-LogEntry ("VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu for User: {0}..." -f $UserID) -Outhost
             Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackProgs -Type DWord -Value 0 -Force
@@ -2427,6 +2606,19 @@ If ($OptimizeForVDI)
         $p++
     }
 
+}
+Else{$stepCounter++}
+
+
+If($DisableActivityHistory)
+ {
+    # Disable Activity History feed in Task View
+    #Note: The checkbox "Let Windows collect my activities from this PC" remains checked even when the function is disabled
+
+	Write-LogEntry ("Disabling Disabling Activity History...") -Severity 1 -Outhost
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableActivityFeed" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "PublishUserActivities" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "UploadUserActivities" -Type DWord -Value 0 -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -2886,6 +3078,82 @@ If($RemoveRecycleBinOnDesktop)
 Else{$stepCounter++}
 
 
+# Disable Application suggestions and automatic installation
+If ($DisableAppSuggestions)
+{
+    $AppSuggestions = [ordered]@{
+        ContentDeliveryAllowed="Content Delivery"
+	    OemPreInstalledAppsEnabled="Oem PreInstalled Apps"
+	    PreInstalledAppsEnabled="PreInstalled Apps"
+	    PreInstalledAppsEverEnabled="PreInstalled Apps Ever"
+	    SilentInstalledAppsEnabled="Automatically Installing Suggested Apps"
+	    "SubscribedContent-310093Enabled"="Show me the Windows welcome experience after updates and occasionally when I sign in to highlight what's new and suggested"
+	    "SubscribedContent-338387Enabled"="Get fun facts, tips and more from Windows and Cortana on your lock screen"
+	    "SubscribedContent-338388Enabled"="Occasionally show suggestions in Start"
+	    "SubscribedContent-338389Enabled"="Get Tips, Tricks, and Suggestions Notifications"
+	    "SubscribedContent-338393Enabled"="Show me sggested Content in Settings app"
+        "SubscribedContent-353694Enabled"="Show me sggested Content in Settings app"   
+        "SubscribedContent-353696Enabled"="Show me sggested Content in Settings app"
+	    "SubscribedContent-353698Enabled"="Show suggestions occasionally in Timeline"
+	    SystemPaneSuggestionsEnabled="SystemPane Suggestions"
+    }
+    $i = 1
+
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableWindowsConsumerFeatures" -Type DWord -Value 1 -Force -TryLGPO:$true
+
+    Foreach ($key in $AppSuggestions.GetEnumerator()){
+        $AdName = $key.Value
+        Write-LogEntry ("Disabling `"{0}`" option [{1}]..." -f $AdName) -Severity 1 -Outhost
+
+        Show-ProgressStatus -Message "Disabling App Suggestions" -SubMessage ("Disabling: `"{2}`" ({0} of {1})" -f $i,$AppSuggestions.count,$AdName) -Step $i -MaxStep $AppSuggestions.count -Outhost
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0
+
+        $p = 1
+        # Loop through each profile on the machine
+        Foreach ($UserProfile in $UserProfiles) {
+            Try{
+                $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+                $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
+            }
+            Catch{
+                $UserID = $UserProfile.SID
+            }
+            Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Disabling App Suggestions for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
+
+
+            #loadhive if not mounted
+            If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
+                Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
+                $HiveLoaded = $true
+            }
+
+            If ($HiveLoaded -eq $true) {
+                Write-LogEntry ("Disabling App Suggestions for User: {0}..." -f $UserID) -Outhost
+                Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0 -Force
+                If ([System.Environment]::OSVersion.Version.Build -ge 17134) {
+                    $key = Get-ItemProperty -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount\*windows.data.placeholdertilecollection\Current"
+		            Set-ItemProperty -Path $key.PSPath -Name "Data" -Type Binary -Value $key.Data[0..15]
+                }
+            }
+
+            #remove any leftove reg process and then remove hive
+            If ($HiveLoaded -eq $true) {
+                [gc]::Collect()
+                Start-Sleep -Seconds 10
+                Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
+            }
+            $p++
+        }
+        
+        Start-Sleep -Seconds 10
+        $i++
+    }
+
+    Stop-Process -Name "ShellExperienceHost" -Force -ErrorAction SilentlyContinue
+}
+Else{$stepCounter++}
+
+
 If($Hide3DObjectsFromExplorer)
 {
     Show-ProgressStatus -Message "Hiding 3D Objects icon from Explorer namespace" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
@@ -2920,7 +3188,7 @@ If($SetSmartScreenFilter)
     Write-LogEntry "Enabling Smart Screen Filter on Edge..." -Severity 1 -Outhost
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverride" -Type DWord -Value 1 -Force -TryLGPO:$true
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverrideAppRepUnknown" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "EnabledV9" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "EnabledV9" -Type DWord -Value $value -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 

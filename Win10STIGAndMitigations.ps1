@@ -614,7 +614,6 @@ If($ApplySTIGItems )
     Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name "AllowGameDVR" -Type DWord -Value 0 -Force -TryLGPO:$true
 
 	Write-LogEntry ("STIG Rule ID: SV-78173r3_rule :: Privacy Mitigations :: {0}Disabling telemetry..." -f $prefixmsg) -Outhost
-	
 	If ($OsCaption -like "*Enterprise*" -or $OsCaption -like "*Education*"){
 		$TelemetryLevel = "0"
 		Write-LogEntry "Privacy Mitigations :: Enterprise edition detected. Supported telemetry level: Security." -Outhost
@@ -624,6 +623,8 @@ If($ApplySTIGItems )
 		Write-LogEntry "Privacy Mitigations :: Lowest supported telemetry level: Basic." -Outhost
 	}
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force -TryLGPO:$true
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
+    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
 
     Write-LogEntry "STIG Rule ID: SV-96859r1_rule: Disabling access the Insider build controls in the Advanced Options.." -Outhost
     Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'LimitEnhancedDiagnosticDataWindowsAnalytics' -Type DWord -Value 1 -Force -TryLGPO:$true  
@@ -924,6 +925,8 @@ If($ApplySTIGItems )
 
     Write-LogEntry "STIG Rule ID: SV-85261r2_rule :: Disabling Server Message Block (SMB) v1 on Server..." -Outhost
     Try{
+        Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+        #Set-SmbServerConfiguration -EnableSMB2Protocol $false -Force
         Disable-WindowsOptionalFeature -FeatureName SMB1Protocol -Online -NoRestart -ErrorAction Stop | Out-Null
     }
     Catch [System.Management.Automation.ActionPreferenceStopException]{
@@ -1120,43 +1123,36 @@ If($ApplySTIGItems )
     Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'ForceEncryptedPassword' -Value 2 -Force
     Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'SecureVPN' -Value 1 -Force
     #>
+
+    Write-LogEntry "Disabling LLMNR..." -Outhost
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Type DWord -Value 0 -Force -TryLGPO:$true
+    
+    Write-LogEntry "Disabling NCSI active test..." -Outhost
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator" -Name "NoActiveProbe" -Type DWord -Value 1 -Force -TryLGPO:$true
+
+	Write-LogEntry "Setting unknown networks profile to private..." -Outhost
+	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\NetworkList\Signatures\010103000F0000F0010000000F0000F0C967A3643C3AD745950DA7859209176EF5B87C875FA20DF21951640E807D7C24" -Name "Category" -Type DWord -Value 1 -Force -TryLGPO:$true
+
+    Write-LogEntry "Disabling automatic installation of network devices..." -Outhost
+    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\NcdAutoSetup\Private" -Name "AutoSetup" -Type DWord -Value 0
 }
 
 
 If($ApplySTIGItems -or $ApplyEMETMitigations)
 {
+    Write-LogEntry "Enabling Controlled Folder Access..." -Outhost
+    Set-MpPreference -EnableControlledFolderAccess Enabled -ErrorAction SilentlyContinue
+    
+    Write-LogEntry "Disabling Controlled Folder Access..." -Outhost
+	Set-MpPreference -EnableControlledFolderAccess Disabled -ErrorAction SilentlyContinue
+    
+    Write-LogEntry "Enabling Core Isolation Memory Integrity..." -Outhost
+    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name "Enabled" -Type DWord -Value 1 -Force
+
+    Write-LogEntry "Enabling Windows Defender Application Guard..." -Outhost
+	Enable-WindowsOptionalFeature -online -FeatureName "Windows-Defender-ApplicationGuard" -NoRestart -WarningAction SilentlyContinue | Out-Null
+
     if ($OSBuildNumber -gt 17763) {
-      <#
-        Set-ProcessMitigation System -enable DEP
-        Set-ProcessMitigation System -enable BottomUp
-        Set-ProcessMitigation System -enable ForceRelocateImages
-        Set-ProcessMitigation System -enable EnableExportAddressFilter
-        Set-ProcessMitigation System -enable EnableExportAddressFilterPlus
-        Set-ProcessMitigation System -enable EnableImportAddressFilter
-        Set-ProcessMitigation System -enable EnableRopStackPivot
-        Set-ProcessMitigation System -enable EnableRopCallerCheck
-        Set-ProcessMitigation System -enable EnableRopSimExec
-        Set-ProcessMitigation System -enable AllowStoreSignedBinaries
-        Set-ProcessMitigation System -enable AllowThreadsToOptOut
-        Set-ProcessMitigation System -enable BlockDynamicCode
-        Set-ProcessMitigation System -enable BlockLowLabelImageLoads
-        Set-ProcessMitigation system -enable BlockRemoteImageLoads
-        Set-ProcessMitigation system -enable CFG
-        Set-ProcessMitigation System -enable DisableExtensionPoints
-        Set-ProcessMitigation System -enable DisableNonSystemFonts
-        Set-ProcessMitigation System -enable DisableWin32kSystemCalls
-        Set-ProcessMitigation System -enable DisallowChildProcessCreation
-        Set-ProcessMitigation System -enable EmulateAtlThunks
-        Set-ProcessMitigation System -enable EnforceModuleDependencySigning
-        Set-ProcessMitigation System -enable HighEntropy
-        Set-ProcessMitigation System -enable MicrosoftSignedOnly
-        Set-ProcessMitigation System -enable PreferSystem32
-        Set-ProcessMitigation System -enable RequireInfo
-        Set-ProcessMitigation system -enable SEHOP
-        Set-ProcessMitigation system -enable StrictHandle
-        Set-ProcessMitigation system -enable SuppressExports
-        Set-ProcessMitigation system -enable TerminateOnError 
-    #>
 
         Write-LogEntry "STIG Rule ID: SV-91787r3_rule :: Enabling Data Execution Prevention (DEP) for exploit protection..." -Outhost
         If((Get-ProcessMitigation -System).DEP.Enable -eq "OFF"){
