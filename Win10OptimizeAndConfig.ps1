@@ -15,7 +15,7 @@
 
     . PARAM
         Configurable using custom variables in MDT/SCCM:
-            CFG_DisableScript
+            CFG_DisableConfigScript
             CFG_UseLGPOForConfigs
             LGPOPath
             CFG_SetPowerCFG
@@ -85,6 +85,10 @@
             CFG_DisablePreviewBuild
             CFG_DisableAppSuggestions
             CFG_DisableActivityHistory
+            CFG_DisableAdminShares
+            CFG_DisableDriverUpdates
+            CFG_EnableLinuxSubSystem
+            CFG_EnableTaskbarAutoColor
     
     . EXAMPLE
         #Copy this to MDT CustomSettings.ini
@@ -97,7 +101,7 @@
         CFG_InstallPSModules,CFG_EnableVisualPerformance,CFG_EnableDarkTheme,CFG_EnableNumlockStartup,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,
         CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,SCCMSiteServer,AppVolMgrServer,AdminMenuConfigPath,CFG_SetSmartScreenFilter,CFG_EnableStrictUAC,
         CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades,CFG_DisableSmartCardLogon,CFG_DisablePreviewBuild,CFG_DisableAppSuggestions,
-        CFG_DisableActivityHistory
+        CFG_DisableActivityHistory,CFG_DisableAdminShares,CFG_DisableDriverUpdates,CFG_EnableLinuxSubSystem,CFG_EnableTaskbarAutoColor
 
         Then add each option to a priority specifically for your use, like:
         [Default]
@@ -141,8 +145,10 @@ Function Write-LogEntry{
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
         [ValidateNotNullOrEmpty()]
         [string]$Message,
+
         [Parameter(Mandatory=$false,Position=2)]
 		[string]$Source = '',
+
         [parameter(Mandatory=$false)]
         [ValidateSet(0,1,2,3,4)]
         [int16]$Severity,
@@ -152,7 +158,7 @@ Function Write-LogEntry{
         [string]$OutputLogFile = $Global:LogFilePath,
 
         [parameter(Mandatory=$false)]
-        [switch]$Outhost
+        [switch]$Outhost = $Global:OutToHost
     )
     ## Get the name of this function
     [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
@@ -234,14 +240,14 @@ Function Config-Bluetooth{
             Await ($bluetooth.SetStateAsync($DeviceStatus)) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
         }
         Catch{
-            Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Outhost
+            Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3
         }
         Finally{
             #If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
         }
     }
     Else{
-        Write-LogEntry ("No Bluetooth found") -Severity 0 -Outhost
+        Write-LogEntry ("No Bluetooth found") -Severity 0
     }
     
 }
@@ -258,26 +264,30 @@ function Disable-Indexing {
 }
 
 
-Function Set-SystemSettings {
+Function Set-SystemSetting {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact='Medium')]
     Param (
 
-    [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [Parameter(Mandatory=$true,Position=0)]
     [Alias("Path")]
     [string]$RegPath,
 
-    [Parameter(Mandatory=$false,Position=1,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [Parameter(Mandatory=$false,Position=1)]
     [Alias("v")]
     [string]$Name,
 
-    [Parameter(Mandatory=$false,Position=2,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [Parameter(Mandatory=$false,Position=2)]
     [Alias("d")]
     $Value,
 
-    [Parameter(Mandatory=$false,Position=3,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [Parameter(Mandatory=$false,Position=3)]
     [ValidateSet('None','String','Binary','DWord','ExpandString','MultiString','QWord')]
     [Alias("PropertyType","t")]
     $Type,
+
+    [Parameter(Mandatory=$false,Position=4)]
+    [Alias("f")]
+    [switch]$Force,
 
     [Parameter(Mandatory=$false)]
     [boolean]$TryLGPO,
@@ -287,10 +297,6 @@ Function Set-SystemSettings {
 
     [Parameter(Mandatory=$false)]
     [string]$LogPath,
-
-    [Parameter(Mandatory=$false,Position=4,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
-    [Alias("f")]
-    [switch]$Force,
 
     [Parameter(Mandatory=$false)]
     [switch]$RemoveFile
@@ -332,15 +338,15 @@ Function Set-SystemSettings {
         [String]$Value = $Value -split ',',2
 
         Switch($RegKeyHive){
-            HKEY_LOCAL_MACHINE {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
-            MACHINE {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
-            HKLM {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
-            HKEY_CURRENT_USER {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
-            HKEY_USERS {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
-            HKCU {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
-            HKU {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
-            USER {$LGPOHive = 'User';$RegProperty = 'HKCU:'}
-            default {$LGPOHive = 'Computer';$RegProperty = 'HKLM:'}
+            HKEY_LOCAL_MACHINE {$LGPOHive = 'Computer';$RegHive = 'HKLM:'}
+            MACHINE {$LGPOHive = 'Computer';$RegHive = 'HKLM:'}
+            HKLM {$LGPOHive = 'Computer';$RegHive = 'HKLM:'}
+            HKEY_CURRENT_USER {$LGPOHive = 'User';$RegHive = 'HKCU:'}
+            HKEY_USERS {$LGPOHive = 'User';$RegHive = 'Registry::HKEY_USERS'}
+            HKCU {$LGPOHive = 'User';$RegHive = 'HKCU:'}
+            HKU {$LGPOHive = 'User';$RegHive = 'Registry::HKEY_USERS'}
+            USER {$LGPOHive = 'User';$RegHive = 'HKCU:'}
+            default {$LGPOHive = 'Computer';$RegHive = 'HKLM:'}
         }
 
         #convert registry type to LGPO type
@@ -372,7 +378,7 @@ Function Set-SystemSettings {
                     $LGPOfile = ($RegKeyHive + '-' + $RegKeyPath.replace('\','-').replace(' ','') + '-' + $RegKeyName.replace(' ','') + '.lgpo')
             
                     #complete LGPO file
-                    Write-LogEntry ("LGPO applying [{3}] to registry: [{0}\{1}\{2}] as a Group Policy item" -f $RegProperty,$RegKeyPath,$RegKeyName,$RegKeyName) -Severity 4 -Source ${CmdletName} -Outhost
+                    Write-LogEntry ("LGPO applying [{3}] to registry: [{0}\{1}\{2}] as a Group Policy item" -f $RegHive,$RegKeyPath,$RegKeyName,$RegKeyName) -Severity 4 -Source ${CmdletName}
                     $lgpoout += "$LGPOHive`r`n"
                     $lgpoout += "$RegKeyPath`r`n"
                     $lgpoout += "$RegKeyName`r`n"
@@ -381,23 +387,23 @@ Function Set-SystemSettings {
                     $lgpoout | Out-File "$env:Temp\$LGPOfile"
 
                     If($VerbosePreference){$args = "/v /q /t"}Else{$args="/q /t"}
-                    Write-LogEntry "Start-Process $LGPOExe -ArgumentList '/t $env:Temp\$LGPOfile' -RedirectStandardError '$env:Temp\$LGPOfile.stderr.log'" -Severity 4 -Source ${CmdletName} -Outhost
+                    Write-LogEntry "Start-Process $LGPOExe -ArgumentList '/t $env:Temp\$LGPOfile' -RedirectStandardError '$env:Temp\$LGPOfile.stderr.log'" -Severity 4 -Source ${CmdletName}
                     
                     If(!$WhatIfPreference){$result = Start-Process $LGPOExe -ArgumentList "$args $env:Temp\$LGPOfile /v" -RedirectStandardError "$env:Temp\$LGPOfile.stderr.log" -Wait -NoNewWindow -PassThru | Out-Null}
-                    Write-LogEntry ("LGPO ran successfully. Exit code: {0}" -f $result.ExitCode) -Severity 4 -Outhost
+                    Write-LogEntry ("LGPO ran successfully. Exit code: {0}" -f $result.ExitCode) -Severity 4
                 }
                 Else{
-                    Write-LogEntry ("LGPO will not be used. Path not found: {0}" -f $LGPOExe) -Severity 3 -Outhost
+                    Write-LogEntry ("LGPO will not be used. Path not found: {0}" -f $LGPOExe) -Severity 3
 
                 }
             }
             Else{
-                Write-LogEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]...." -f $RegProperty,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName} -Outhost
+                Write-LogEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]...." -f $RegHive,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName}
             }
         }
         Catch{
             If($TryLGPO -and $LGPOExe){
-                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]...." -f $result.ExitCode,$RegProperty,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName} -Outhost
+                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]...." -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
             }
         }
         Finally
@@ -406,18 +412,18 @@ Function Set-SystemSettings {
             
             #verify the registry value has been set
             Try{
-                If( -not(Test-Path ($RegProperty +'\'+ $RegKeyPath)) ){
-                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]...." -f ($RegProperty +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName} -Outhost
-                    New-Item -Path ($RegProperty +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference | Out-Null
-                    New-ItemProperty -Path ($RegProperty +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference | Out-Null
+                If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
+                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]...." -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference | Out-Null
+                    New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference | Out-Null
                 } 
                 Else{
-                    Write-LogEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegProperty +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 1 -Source ${CmdletName} -Outhost
-                    Set-ItemProperty -Path ($RegProperty +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference | Out-Null
+                    Write-LogEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
+                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference | Out-Null
                 }
             }
             Catch{
-                Write-LogEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegProperty,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName} -Outhost
+                Write-LogEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegHive,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName}
             }
 
         }
@@ -432,6 +438,216 @@ Function Set-SystemSettings {
         }
     }
 
+}
+
+
+Function Set-UserSetting {
+    [CmdletBinding()]
+    Param (
+
+    [Parameter(Mandatory=$true,Position=0)]
+    [Alias("Path")]
+    [string]$RegPath,
+
+    [Parameter(Mandatory=$false,Position=1)]
+    [Alias("v")]
+    [string]$Name,
+
+    [Parameter(Mandatory=$false,Position=2)]
+    [Alias("d")]
+    $Value,
+
+    [Parameter(Mandatory=$false,Position=3)]
+    [ValidateSet('None','String','Binary','DWord','ExpandString','MultiString','QWord')]
+    [Alias("PropertyType","t")]
+    [string]$Type,
+
+    [Parameter(Mandatory=$false,Position=4,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+    [ValidateSet('CurrentUser','AllUsers','Default')]
+    [Alias("Users")]
+    [string]$ApplyTo = $Global:ApplyToProfiles,
+
+
+    [Parameter(Mandatory=$false,Position=5)]
+    [Alias("r")]
+    [switch]$Remove,
+
+    [Parameter(Mandatory=$false,Position=6)]
+    [Alias("f")]
+    [switch]$Force,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateNotNullOrEmpty()]
+    [string]$Message,
+
+    [Parameter(Mandatory=$false)]
+    [boolean]$TryLGPO,
+
+    [Parameter(Mandatory=$false)]
+    $LGPOExe = $Global:LGPOPath,
+
+    [Parameter(Mandatory=$false)]
+    [string]$LogPath
+
+    )
+    Begin
+    {
+        ## Get the name of this function
+        [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+
+        if (-not $PSBoundParameters.ContainsKey('Verbose')) {
+            $VerbosePreference = $PSCmdlet.SessionState.PSVariable.GetValue('VerbosePreference')
+        }
+
+    }
+    Process
+    { 
+        $RegKeyHive = ($RegPath).Split('\')[0].Replace('Registry::','').Replace(':','')
+        
+        #check if hive is local machine.
+        If($RegKeyHive -match "HKEY_LOCAL_MACHINE|HKLM|HKCR"){
+            Write-LogEntry "Registry path is not a user path. Use Set-SystemSetting cmdlet"
+            return
+        }
+        #check if hive is user hive
+        ElseIf($RegKeyHive -match "HKEY_USERS|HKEY_CURRENT_USER|HKCU|HKU"){
+           #if Name not specified, grab last value from full path
+            If(!$Name){
+                $RegKeyPath = Split-Path ($RegPath).Split('\',2)[1] -Parent
+                $RegKeyName = Split-Path ($RegPath).Split('\',2)[1] -Leaf
+            }
+            Else{
+                $RegKeyPath = ($RegPath).Split('\',2)[1]
+                $RegKeyName = $Name
+            } 
+        }
+        ElseIf($ApplyTo){
+            #since a hive was not found, check if its specified
+
+            #if Name not specified, grab last value from full path
+            If(!$Name){
+                $RegKeyPath = Split-Path ($RegPath) -Parent
+                $RegKeyName = Split-Path ($RegPath) -Leaf
+            }
+            Else{
+                $RegKeyPath = $RegPath
+                $RegKeyName = $Name
+            } 
+        }
+        Else{
+            Write-LogEntry "User registry key not found or specified. Unable to continue..." -Severity 3
+            return
+
+        }
+
+
+        If(!$Global:UserProfiles){
+            # Get each user profile SID and Path to the profile
+            $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
+
+            # Add in the .DEFAULT User Profile
+            $DefaultProfile = "" | Select-Object SID, UserHive
+            $DefaultProfile.SID = "DEFAULT"
+            $DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
+
+            #Add it to the UserProfile list
+            $Global:UserProfiles = @()
+            $Global:UserProfiles += $AllProfiles
+            $Global:UserProfiles += $DefaultProfile
+
+            #get current users sid
+            [string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
+        }
+
+        #overwrite Hive is specified
+        If($ApplyTo){
+            Switch($ApplyTo){
+                'AllUsers' {$RegHive = "HKEY_USERS"; $ProfileList = $Global:UserProfiles}
+                'CurrentUser'   {$RegHive = "HKCU" ; $ProfileList = $Global:UserProfiles }
+                'Default'       {$RegHive = "HKU"  ; $ProfileList = 'Default'}
+            }
+        }
+        Else{
+            $RegHive = $RegKeyHive
+        }
+               
+        If($RegHive -eq "HKEY_USERS"){
+
+            If(!$Global:UserProfiles){
+                # Get each user profile SID and Path to the profile
+                $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
+
+                # Add in the .DEFAULT User Profile
+                $DefaultProfile = "" | Select-Object SID, UserHive
+                $DefaultProfile.SID = "DEFAULT"
+                $DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
+
+                #Add it to the UserProfile list
+                $Global:UserProfiles = @()
+                $Global:UserProfiles += $AllProfiles
+                $Global:UserProfiles += $DefaultProfile
+
+                #get current users sid
+                [string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
+            }
+        
+            
+            $p = 1
+            # Loop through each profile on the machine
+            Foreach ($UserProfile in $UserProfiles) {
+                
+                Try{
+                    $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
+                    $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
+                }
+                Catch{
+                    $UserID = $UserProfile.SID
+                }
+
+                #Write-Host "$($Global:UserProfiles.count)`n$RegHive`n$RegKeyPath`n$UserID"
+                #continue
+
+                If($Message){Show-ProgressStatus -Message $Message -SubMessage ("for user profile ({0} of {1})" -f $p,$UserProfiles.count) -Step $p -MaxStep $UserProfiles.count}
+
+                #loadhive if not mounted
+                If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
+                    Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
+                    $HiveLoaded = $true
+                }
+
+                If ($HiveLoaded -eq $true) {   
+                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserID)}
+                    If($Remove){
+                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
+                    }
+                    Else{
+                        Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+                    }
+                }
+
+                #remove any leftove reg process and then remove hive
+                If ($HiveLoaded -eq $true) {
+                    [gc]::Collect()
+                    Start-Sleep -Seconds 3
+                    Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru -WindowStyle Hidden | Out-Null
+                }
+                $p++
+            }
+        }
+        Else{
+            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ApplyTo)}
+            If($Remove){
+                Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
+            }
+            Else{
+                Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $Name -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+            }
+        }
+
+    }
+    End {
+       If($Message){Show-ProgressStatus -Message "Completed $Message"  -Step 1 -MaxStep 1}
+    }
 }
 
 function Set-PowerPlan {
@@ -479,10 +695,11 @@ function Set-PowerPlan {
         if (-not $PSBoundParameters.ContainsKey('WhatIf')) {
             $WhatIfPreference = $PSCmdlet.SessionState.PSVariable.GetValue('WhatIfPreference')
         }
+
     }
     Process
     {
-        Write-LogEntry ("Setting power plan to `"{0}`"" -f $PreferredPlan) -Source ${CmdletName} -Outhost
+        Write-LogEntry ("Setting power plan to `"{0}`"" -f $PreferredPlan) -Source ${CmdletName}
 
         $guid = (Get-WmiObject -Class Win32_PowerPlan -Namespace root\cimv2\power -Filter "ElementName='$PreferredPlan'" -ComputerName $ComputerName).InstanceID.ToString()
 
@@ -527,7 +744,7 @@ function Set-PowerPlan {
         }
 
         Try{
-            If($VerbosePreference){Write-LogEntry ("powercfg $params") -Source ${CmdletName} -Outhost}
+            If($VerbosePreference){Write-LogEntry ("powercfg $params") -Source ${CmdletName}}
             $results = $process.Create("powercfg $params")
         }
         Catch{
@@ -536,7 +753,7 @@ function Set-PowerPlan {
     }
     End {
         #Write-Host $Output
-        Write-LogEntry ("{0}" -f $Output) -Severity 1 -Source ${CmdletName} -Outhost
+        Write-LogEntry ("{0}" -f $Output) -Source ${CmdletName}
     }
 }
 
@@ -612,13 +829,18 @@ function Show-ProgressStatus
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [string] $Message,
+        [string]$Message,
+
         [Parameter(Mandatory=$true)]
         [int]$Step,
+
         [Parameter(Mandatory=$true)]
         [int]$MaxStep,
+
         [string]$SubMessage,
+
         [int]$IncrementSteps,
+
         [switch]$Outhost
     )
 
@@ -651,7 +873,7 @@ function Show-ProgressStatus
         }
     }
     End{
-        Write-LogEntry $Message -Severity 1 -Outhost:$Outhost
+        Write-LogEntry $Message -Outhost:$Outhost
     }
 }
 
@@ -664,6 +886,7 @@ If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostI
 [string]$scriptName = Split-Path $InvocationInfo.MyCommand.Path -Leaf
 [string]$scriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($scriptName)
 [int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
+[string]$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
 
 Import-SMSTSENV
 
@@ -674,21 +897,9 @@ $ModulesPath = Join-Path -Path $scriptDirectory -ChildPath 'PSModules'
 $BinPath = Join-Path -Path $scriptDirectory -ChildPath 'Bin'
 $FilesPath = Join-Path -Path $scriptDirectory -ChildPath 'Files'
 
-# Get each user profile SID and Path to the profile
-$AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
-
-# Add in the .DEFAULT User Profile
-$DefaultProfile = "" | Select-Object SID, UserHive
-$DefaultProfile.SID = "DEFAULT"
-$DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
-
-#Add it to the UserProfile list
-$UserProfiles = @()
-$UserProfiles += $AllProfiles
-$UserProfiles += $DefaultProfile
-
-#get current users sid
-[string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
+#if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
+If($tsenv){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
+If($tsenv -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
 
 #grab all Show-ProgressStatus commands in script and count them
 $script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
@@ -764,7 +975,7 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$InstallPSModules = $false
 [psobject]$InstallModulesPath = Get-ChildItem $ModulesPath -Filter *.psm1 -Recurse
 [boolean]$EnableVisualPerformance = $false
-[boolean]$EnableDarkTheme = $false
+[boolean]$EnableDarkTheme = $true
 [boolean]$EnableNumlockStartup = $false
 [boolean]$ShowKnownExtensions = $false
 [boolean]$ShowHiddenFiles = $false
@@ -787,11 +998,15 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$DisablePreviewBuild = $false
 [boolean]$DisableAppSuggestions = $false
 [boolean]$DisableActivityHistory = $false
+[boolean]$DisableAdminShares = $false
+[boolean]$DisableDriverUpdates = $false
+[boolean]$EnableLinuxSubSystem = $false
+[boolean]$EnableTaskbarAutoColor = $false
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
     # Configurations comes from Tasksequence
-    If($tsenv:CFG_DisableScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableScript"))}
+    If($tsenv:CFG_DisableConfigScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableConfigScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
     If($tsenv:CFG_SetPowerCFG){[string]$SetPowerCFG = $tsenv.Value("CFG_SetPowerCFG")}
@@ -861,17 +1076,18 @@ If($tsenv){
     If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
     If($tsenv:CFG_DisablePreviewBuild){[boolean]$DisablePreviewBuild = [boolean]::Parse($tsenv.Value("CFG_DisablePreviewBuild"))}
     If($tsenv:CFG_DisableAppSuggestions){[boolean]$DisableAppSuggestions = [boolean]::Parse($tsenv.Value("CFG_DisableAppSuggestions"))}
-    If($tsenv:CFG_DisableActivityHistory){$DisableActivityHistory = [boolean]::Parse($tsenv.Value("CFG_DisableActivityHistory"))}
+    If($tsenv:CFG_DisableActivityHistory){[boolean]$DisableActivityHistory = [boolean]::Parse($tsenv.Value("CFG_DisableActivityHistory"))}
+    If($tsenv:CFG_DisableAdminShares){[boolean]$DisableAdminShares = [boolean]::Parse($tsenv.Value("CFG_DisableAdminShares"))}
+    If($tsenv:CFG_DisableDriverUpdates){[boolean]$DisableDriverUpdates = [boolean]::Parse($tsenv.Value("CFG_DisableDriverUpdates"))}
+    If($tsenv:CFG_EnableLinuxSubSystem){[boolean]$EnableLinuxSubSystem = [boolean]::Parse($tsenv.Value("CFG_EnableLinuxSubSystem"))}
+    If($tsenv:CFG_EnableTaskbarAutoColor){[boolean]$EnableTaskbarAutoColor = [boolean]::Parse($tsenv.Value("CFG_EnableTaskbarAutoColor"))}
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
 If($DisableScript){
-    Write-LogEntry "Script is disabled!" -Severity 1 -Outhost
+    Write-LogEntry "Script is disabled!"
     Exit 0
 }
-
-#$VerbosePreference = 'SilentlyContinue'
-$VerbosePreference = 'Continue'
 
 #check if LGPO file exists in Tools directory or Specified LGPOPath
 $FindLGPO = Get-ChildItem $Global:LGPOPath -Filter LGPO.exe -ErrorAction SilentlyContinue
@@ -894,7 +1110,7 @@ If($OneNotePathx64){$OneNotePath = $OneNotePathx64}
 If ($InstallPSModules)
 {
     $CFGMessage = "Installing PowerShell Modules"
-    Show-ProgressStatus -Message $CFGMessage -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message $CFGMessage -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     If(Test-Path "$BinPath\nuget"){
         #Install Nuget prereq
@@ -903,7 +1119,7 @@ If ($InstallPSModules)
             $NuGetAssemblyVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($NuGetAssemblySourcePath.FullName).FileVersion
             $NuGetAssemblyDestPath = "$env:ProgramFiles\PackageManagement\ProviderAssemblies\nuget\$NuGetAssemblyVersion"
             If (!(Test-Path $NuGetAssemblyDestPath)){
-                Write-LogEntry ("Copying nuget Assembly [{0}] to [{1}]..." -f $NuGetAssemblyVersion,$NuGetAssemblyDestPath) -Outhost
+                Write-LogEntry ("Copying nuget Assembly [{0}] to [{1}]..." -f $NuGetAssemblyVersion,$NuGetAssemblyDestPath)
                 New-Item $NuGetAssemblyDestPath -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
                 Copy-Item -Path $NuGetAssemblySourcePath.FullName -Destination $NuGetAssemblyDestPath -Force -ErrorAction SilentlyContinue | Out-Null
             }
@@ -912,13 +1128,13 @@ If ($InstallPSModules)
 
     If($InstallModulesPath.count -gt 0){
         $i = 1
-        Write-LogEntry $CFGMessage -Severity 1 -Outhost
+        Write-LogEntry $CFGMessage
 
         Foreach($module in $InstallModulesPath){
             Import-Module -name $module.FullName -Global -NoClobber -Force | Out-Null
 
             #Status is what shows up in MDT progressUI
-            Show-ProgressStatus -Message $CFGMessage -SubMessage (": {0} ({1} of {2})" -f $module.FullName,$i,$items.count) -Step $i -MaxStep $module.count -Outhost
+            Show-ProgressStatus -Message $CFGMessage -SubMessage (": {0} ({1} of {2})" -f $module.FullName,$i,$items.count) -Step $i -MaxStep $module.count
             $i++
         }
     }
@@ -930,9 +1146,14 @@ Else{$stepCounter++}
 If($DisableActionCenter)
 {
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:45] :: "}
-    Show-ProgressStatus -Message("{0}Disabling Windows Action Center Notifications" -f $prefixmsg) -MaxStep $script:Maxsteps -Outhost
+    $CFGMessage = "Disabling Windows Action Center Notifications"
+    Show-ProgressStatus -Message("{0}{1}" -f $prefixmsg,$CFGMessage) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\ImmersiveShell" -Name "UseActionCenterExperience" -Type DWord -Value 0 -Force | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\ImmersiveShell" -Name "UseActionCenterExperience" -Type DWord -Value 0 -Force
+    
+    Set-UserSetting -Message $CFGMessage -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "DisableNotificationCenter" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-UserSetting -Message $CFGMessage -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "DisableNotificationCenter" -Type DWord -Value 1 -Force -TryLGPO:$true
+
 }
 Else{$stepCounter++}
 
@@ -940,64 +1161,44 @@ Else{$stepCounter++}
 If($DisableFeedback)
 {
     $CFGMessage = "Disabling Feedback Notifications"
-    Show-ProgressStatus -Message $CFGMessage -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    #Show-ProgressStatus -Message $CFGMessage -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:7] [Optional] :: "}
+    Set-UserSetting -Message ("{1}{0}" -f $CFGMessage,$prefixmsg) -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "NumberOfSIUFInPeriod" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message ("{1}{0}" -f $CFGMessage,$prefixmsg) -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "PeriodInNanoSeconds" -Type DWord -Value 0 -Force
 
-        Show-ProgressStatus -Message $CFGMessage -SubMessage ("for user profile ({0} of {1})" -f $p,$UserProfiles.count) -Step $p -MaxStep $UserProfiles.count
+    Write-LogEntry "Disabling all feedback Scheduled Tasks..."
+    Disable-ScheduledTask -TaskName "Microsoft\Windows\Feedback\Siuf\DmClient" -ErrorAction SilentlyContinue | Out-Null
+	Disable-ScheduledTask -TaskName "Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload" -ErrorAction SilentlyContinue | Out-Null
 
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
+    Write-LogEntry "Disabling all feedback notifications..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value '1' -Force -TryLGPO:$true
 
-        If ($HiveLoaded -eq $true) {
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:7] [Optional] :: "}
-            Write-LogEntry ("{1}{0} for User: {2}..." -f $CFGMessage,$prefixmsg,$UserID) -Severity 1 -Outhost
-
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Siuf\Rules" -Name NumberOfSIUFInPeriod -Type DWord -Value 0 -Force | Out-Null
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Siuf\Rules" -Name PeriodInNanoSeconds -Type DWord -Value 0 -Force | Out-Null
-            Start-Sleep -Seconds 10
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-
-        Write-LogEntry "Disabling all feedback Scheduled Tasks..." -Severity 1 -Outhost
-        Disable-ScheduledTask -TaskName "Microsoft\Windows\Feedback\Siuf\DmClient" -ErrorAction SilentlyContinue | Out-Null
-	    Disable-ScheduledTask -TaskName "Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload" -ErrorAction SilentlyContinue | Out-Null
-
-        Write-LogEntry "Disabling all feedback notifications..." -Severity 1 -Outhost
-        Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value '1' -Force -TryLGPO:$true
-    }
 }
 Else{$stepCounter++}
 
 
 If($DisableWindowsUpgrades)
 {
-    Show-ProgressStatus -Message "Disabling Windows Upgrades from Windows Updates" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Windows Upgrades from Windows Updates" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Gwx" -Name DisableGwx -Type DWord -Value 1 -Force | Out-Null
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" -Name DisableOSUpgrade -Type DWord -Value 1 -Force | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Gwx" -Name DisableGwx -Type DWord -Value 1 -Force | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" -Name DisableOSUpgrade -Type DWord -Value 1 -Force | Out-Null
 
-    Write-LogEntry "Disabling access the Insider build controls in the Advanced Options " -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'LimitEnhancedDiagnosticDataWindowsAnalytics' -Type DWord -Value 1 -Force | Out-Null  
+    Write-LogEntry "Disabling access the Insider build controls in the Advanced Options "
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'LimitEnhancedDiagnosticDataWindowsAnalytics' -Type DWord -Value 1 -Force | Out-Null  
+}
+Else{$stepCounter++}
+
+
+If($DisableDriverUpdates)
+{
+    Show-ProgressStatus -Message "Disabling driver offering through Windows Update" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Device Metadata" -Name "PreventDeviceMetadataFromNetwork" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "DontPromptForWindowsUpdate" -Type DWord -Value 1 -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "DontSearchWindowsUpdate" -Type DWord -Value 1 -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "DriverUpdateWizardWuSearchEnabled" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" -Name "ExcludeWUDriversInQualityUpdate" -Type DWord -Value 1 -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -1005,17 +1206,17 @@ Else{$stepCounter++}
 If($DisableStoreOnTaskbar)
 {
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:68] :: "}
-    Show-ProgressStatus -Message ("{0} Disabling Pinning of Microsoft Store app on the taskbar" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("{0} Disabling Pinning of Microsoft Store app on the taskbar" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "NoPinningStoreToTaskbar" -Type DWord -Value 1 -Force | Out-Null
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore" -Name "RemoveWindowsStore" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "NoPinningStoreToTaskbar" -Type DWord -Value 1 -Force | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore" -Name "RemoveWindowsStore" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
 }
 Else{$stepCounter++}
 
 
 If ($EnableOfficeOneNote -and $OneNotePath)
 {
-    Show-ProgressStatus -Message "Setting OneNote file association to the desktop app" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Setting OneNote file association to the desktop app" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
 	New-PSDrive -Name "HKCR" -PSProvider "Registry" -Root "HKEY_CLASSES_ROOT" | Out-Null
 	New-Item -Path 'Registry::HKCR\onenote-cmd\Shell\Open' -Name 'Command' -Force | Out-Null
@@ -1029,17 +1230,17 @@ If($EnablePSLogging)
 {
     Show-ProgressStatus -Message "Enabling Powershell Script Logging" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-	Write-LogEntry "Enabling Powershell Script Block Logging" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
+	Write-LogEntry "Enabling Powershell Script Block Logging"
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
 
-    Write-LogEntry "Enabling Powershell Transcription Logging..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableInvocationHeader" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "OutputDirectory" -Value "" -Force -TryLGPO:$true | Out-Null
+    Write-LogEntry "Enabling Powershell Transcription Logging..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableTranscripting" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "EnableInvocationHeader" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription" -Name "OutputDirectory" -Value "" -Force -TryLGPO:$true | Out-Null
 
-    Write-LogEntry "Enabling Powershell Module Logging..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
-    #Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "ModuleNames" -Value "" -Force | Out-Null
+    Write-LogEntry "Enabling Powershell Module Logging..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "EnableModuleLogging" -Type DWord -Value 1 -Force -TryLGPO:$true | Out-Null
+    #Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging" -Name "ModuleNames" -Value "" -Force | Out-Null
 }
 Else{$stepCounter++}
 
@@ -1047,9 +1248,9 @@ Else{$stepCounter++}
 If ($EnableSystemVerboseMsg)
 {
     #https://support.microsoft.com/en-us/help/325376/how-to-enable-verbose-startup-shutdown-logon-and-logoff-status-message
-    Show-ProgressStatus -Message "Setting Windows Startup to Verbose messages" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Setting Windows Startup to Verbose messages" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "VerboseStatus" -Type DWord -Value 1 -Force | Out-Null
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "VerboseStatus" -Type DWord -Value 1 -Force | Out-Null
     If(Test-Path ('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\SYSTEM\DisableStatusMessages') ){
         Remove-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name 'DisableStatusMessages' -Force | Out-Null
     }
@@ -1060,7 +1261,7 @@ Else{$stepCounter++}
 If (($ApplyCustomHost) -and (Test-Path $HostPath) )
 {
     $HostFile = Split-Path $HostPath -Leaf
-    Show-ProgressStatus -Message ("Copying custom hosts file [{0}] to windows" -f $HostFile) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("Copying custom hosts file [{0}] to windows" -f $HostFile) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Copy-Item $HostPath -Destination "$env:Windir\System32\Drivers\etc\hosts" -Force | Out-Null
 }
@@ -1070,7 +1271,7 @@ Else{$stepCounter++}
 If ($SetPowerCFG -eq 'Balanced')
 {
     #Set Balanced to Default
-    Show-ProgressStatus -Message ("Setting Power configurations to [{0}]"  -f $SetPowerCFG) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("Setting Power configurations to [{0}]"  -f $SetPowerCFG) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Set-PowerPlan -PreferredPlan $SetPowerCFG
 }
@@ -1080,7 +1281,7 @@ Else{$stepCounter++}
 If ($SetPowerCFG -eq 'High Performance')
 {
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:60 & 61] :: "}
-    Show-ProgressStatus -Message ("{0}Setting Power configurations to [{1}]..."  -f $prefixmsg,$SetPowerCFG) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("{0}Setting Power configurations to [{1}]..."  -f $prefixmsg,$SetPowerCFG) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     If($OptimizeForVDI){
         Set-PowerPlan -PreferredPlan $SetPowerCFG -ACTimeout 0 -DCTimeout 0 -ACMonitorTimeout 0 -DCMonitorTimeout 0 -Hibernate Off
@@ -1089,12 +1290,12 @@ If ($SetPowerCFG -eq 'High Performance')
         Set-PowerPlan -PreferredPlan $SetPowerCFG
     }
     
-    Write-LogEntry "Disabling Fast Startup..." -Severity 1 -Outhost
-	Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Type DWord -Value 0 -Force
+    Write-LogEntry "Disabling Fast Startup..."
+	Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Type DWord -Value 0 -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:54] :: "}
-    Write-LogEntry ("{0}Removing turn off hard disk after..."  -f $prefixmsg) -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerSettings\0012ee47-9041-4b5d-9b77-535fba8b1442\6738e2c4-e8a5-4a42-b16a-e040e769756e" -Name "Attributes" -Type DWord -Value 1 -Force
+    Write-LogEntry ("{0}Removing turn off hard disk after..."  -f $prefixmsg)
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerSettings\0012ee47-9041-4b5d-9b77-535fba8b1442\6738e2c4-e8a5-4a42-b16a-e040e769756e" -Name "Attributes" -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
@@ -1103,7 +1304,7 @@ If (($SetPowerCFG -eq 'Custom') -and (Test-Path $PowerCFGFilePath) -and !$Optimi
 {
     $AOPGUID = '50b056f5-0cf6-42f1-9351-82a490d70ef4'
     $PowFile = Split-Path $PowerCFGFilePath -Leaf
-    Show-ProgressStatus -Message ("Setting Power configurations to [{0}] using file [{1}]" -f $SetPowerCFG,"$env:TEMP\$PowFile") -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("Setting Power configurations to [{0}] using file [{1}]" -f $SetPowerCFG,"$env:TEMP\$PowFile") -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Copy-Item $PowerCFGFilePath -Destination "$env:Windir\Temp\$PowFile" -Force | Out-Null
     Start-Process "C:\Windows\system32\powercfg.exe" -ArgumentList "-IMPORT `"$env:Windir\Temp\$PowFile`" $AOPGUID" -Wait -NoNewWindow
@@ -1115,94 +1316,56 @@ Else{$stepCounter++}
 
 If($HideDrivesWithNoMedia)
 {
-    Show-ProgressStatus -Message "Hiding Drives With NoMedia" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideDrivesWithNoMedia' -Type DWord -Value '1' -Force
+    Show-ProgressStatus -Message "Hiding Drives With NoMedia" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideDrivesWithNoMedia' -Type DWord -Value '1' -Force
 }
 Else{$stepCounter++}
 
 
 If ($DisableAutoRun)
 {
-    Show-ProgressStatus -Message "Disabling Autorun" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Autorun" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoAutoplayfornonVolume -Value 1 -Force -TryLGPO:$true | Out-Null
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoAutorun -Value 1 -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoDriveTypeAutoRun -Type DWord -Value 0xFF -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoAutoplayfornonVolume -Value 1 -Force -TryLGPO:$true | Out-Null
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoAutorun -Value 1 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoDriveTypeAutoRun -Type DWord -Value 0xFF -Force
 
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name HonorAutorunSetting -Type DWord -Value 1 -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name HonorAutorunSetting -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
 
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\IniFileMapping\Autorun.inf' -Name '(Default)' -Value "@SYS:DoesNotExist" -Force -ErrorAction SilentlyContinue | Out-Null
-    Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Cdrom' -Name AutoRun -Type DWord -Value 0 -Force
-
-    Write-LogEntry "Disabling Autorun for default users..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKEY_USERS\.DEFAULT\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name HonorAutorunSetting -Type DWord -Value 1 -Force
-    Set-SystemSettings -Path "HKEY_USERS\.DEFAULT\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
-    Set-SystemSettings -Path "HKEY_USERS\.DEFAULT\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
+    Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Cdrom' -Name AutoRun -Type DWord -Value 0 -Force
 
     #windows 10 only
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:6] [Optional] :: "}
-    Write-LogEntry ("{0}Disabling Devices Auto for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
+    Set-UserSetting -Message ("{0}Disabling Devices Auto" -f $prefixmsg) -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
 
-
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-
-        Show-ProgressStatus -Message "Disabling Autorun" -SubMessage ("for user profile ({0} of {1})" -f $p,$UserProfiles.count) -Step $p -MaxStep $UserProfiles.count
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            # Manipulate the registry           
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:6] :: "}
-            Write-LogEntry ("{0}Disabling Autorun for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            #New-Item -Path $settingspath -ErrorAction SilentlyContinue | Out-Null
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name HonorAutorunSetting -Type DWord -Value 1 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
-            Start-Sleep -Seconds 10
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:6] :: "}
+    Write-LogEntry ("{0}Disabling Autorun for AllUsers:" -f $prefixmsg)
+    #New-Item -Path $settingspath -ErrorAction SilentlyContinue | Out-Null
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name HonorAutorunSetting -Type DWord -Value 1 -Force
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
+    
 }
 Else{$stepCounter++}
 
 
 If($EnableFIPS)
 {
-    Show-ProgressStatus -Message "Enabling FIPS Algorithm Policy" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSettings -Path "HKLM\System\CurrentControlSet\Control\Lsa\FIPSAlgorithmPolicy" -Name Enabled -Type DWord -Value 1 -Force
+    Show-ProgressStatus -Message "Enabling FIPS Algorithm Policy" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Control\Lsa\FIPSAlgorithmPolicy" -Name Enabled -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
 
 If ($EnableRDP)
 {
-    Show-ProgressStatus -Message "Enabling RDP" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Type DWord -Value 0 -Force
-	Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Type DWord -Value 1 -Force
+    Show-ProgressStatus -Message "Enabling RDP" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Type DWord -Value 0 -Force
+	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Type DWord -Value 1 -Force
 	Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Action Allow -Profile Any
 }
 Else{$stepCounter++}
@@ -1210,62 +1373,27 @@ Else{$stepCounter++}
 
 If ($DisableOneDrive)
 {
-    Show-ProgressStatus -Message "Disabling OneDrive" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling OneDrive" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisableFileSync' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisableFileSync' -Type DWord -Value '1' -Force -TryLGPO:$true
 	
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:50] :: "}
-    Write-LogEntry ("{0}Disabling synchronizing files to onedrive..." -f $prefixmsg) -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisableFileSyncNGSC' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Write-LogEntry ("{0}Disabling synchronizing files to onedrive..." -f $prefixmsg)
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisableFileSyncNGSC' -Type DWord -Value '1' -Force -TryLGPO:$true
 
-
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'PreventNetworkTrafficPreUserSignIn' -Type DWord -Value '1' -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Skydrive' -Name 'DisableLibrariesDefaultSaveToSkyDrive' -Type DWORD -Value '1' -Force  
+    Write-LogEntry "Preventing OneDrive from generating network traffic"
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'PreventNetworkTrafficPreUserSignIn' -Type DWord -Value '1' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Skydrive' -Name 'DisableLibrariesDefaultSaveToSkyDrive' -Type DWORD -Value '1' -Force  
     
-    Set-SystemSettings -Path 'HKCR\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}\ShellFolder' -Name Attributes -Type DWord -Value 0 -ErrorAction SilentlyContinue -Force
+    Set-SystemSetting -Path 'HKCR\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}\ShellFolder' -Name Attributes -Type DWord -Value 0 -ErrorAction SilentlyContinue -Force
 
-    Write-LogEntry "Disabling personal accounts for OneDrive synchronization..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisablePersonalSync' -Type DWord -Value '1' -Force
-
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-
-        Show-ProgressStatus -Message "Disabling OneDrive" -SubMessage ("for user profile ({0} of {1})" -f $p,$UserProfiles.count) -Step $p -MaxStep $UserProfiles.count
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            #Parent path to registry
-            $settingspath = "HKU:\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Run"
+    Write-LogEntry "Disabling personal accounts for OneDrive synchronization..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisablePersonalSync' -Type DWord -Value '1' -Force
+    Set-UserSetting -Message 'Removing Onedrive' -RegPath "Software\Microsoft\Windows\CurrentVersion\Run" -Name 'OneDriveSetup' -Remove -Force
     
-            Write-LogEntry ("Removing Onedrive [{0}] for User [{1}]..." -f $key.Value,$UserID) -Outhost
-            Remove-Itemproperty -Path $settingspath -Name 'OneDriveSetup' -ErrorAction SilentlyContinue | Out-Null  
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
-
     #uninstall  OneDrive
     if (Test-Path "C:\Windows\System32\OneDriveSetup.exe"){
-        Write-LogEntry ("Attempting to uninstall Onedrive from x64 system...") -Outhost
+        Write-LogEntry ("Attempting to uninstall Onedrive from x64 system...")
         Get-Process OneDrive -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         #Get-Process explorer -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Process "C:\Windows\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -PassThru -WindowStyle Hidden | Out-Null
@@ -1273,28 +1401,37 @@ If ($DisableOneDrive)
     }
 
     if (Test-Path "C:\Windows\SysWOW64\OneDriveSetup.exe"){
-        Write-LogEntry ("Attempting to uninstall Onedrive from x86 system...") -Outhost
+        Write-LogEntry ("Attempting to uninstall Onedrive from x86 system...")
         Get-Process OneDrive -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         #Get-Process explorer -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Process "C:\Windows\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -PassThru -WindowStyle Hidden | Out-Null
         #Start-Process -FilePath "$env:Windir\Explorer.exe" -Wait -ErrorAction SilentlyContinue
     }
 
+    Remove-Item -Path "$env:USERPROFILE\OneDrive" -Force -Recurse -ErrorAction SilentlyContinue
+	Remove-Item -Path "$env:LOCALAPPDATA\Microsoft\OneDrive" -Force -Recurse -ErrorAction SilentlyContinue
+	Remove-Item -Path "$env:PROGRAMDATA\Microsoft OneDrive" -Force -Recurse -ErrorAction SilentlyContinue
+	Remove-Item -Path "$env:SYSTEMDRIVE\OneDriveTemp" -Force -Recurse -ErrorAction SilentlyContinue
+
     # remove OneDrive shortcuts
     Remove-Item -Path "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk" -Force
     Remove-Item -Path "C:\Windows\ServiceProfiles\NetworkService\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk" -Force
+
+    #remove registry references to onedrive
+    Remove-Item -Path "HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Recurse -ErrorAction SilentlyContinue
+	Remove-Item -Path "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Recurse -ErrorAction SilentlyContinue
 }
 Else{
     $stepCounter++
-    #Write-LogEntry "STIG Rule ID: SV-98853r1_rule :: Allowing OneDrive synchronizing of accounts for DoD organization..." -Severity 1 -Outhost
-    #Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\OneDrive\AllowTenantList' -Name '{ORG GUID}' -Type String -Value '{ORG GUID}' -Force -TryLGPO:$true
+    #Write-LogEntry "STIG Rule ID: SV-98853r1_rule :: Allowing OneDrive synchronizing of accounts for DoD organization..."
+    #Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\OneDrive\AllowTenantList' -Name '{ORG GUID}' -Type String -Value '{ORG GUID}' -Force -TryLGPO:$true
 }
 
 
 If ($PreferIPv4OverIPv6)
 {
-    Show-ProgressStatus -Message "Modifying IPv6 bindings to prefer IPv4 over IPv6" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisabledComponents' -Type DWord -Value '32' -Force
+    Show-ProgressStatus -Message "Modifying IPv6 bindings to prefer IPv4 over IPv6" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisabledComponents' -Type DWord -Value '32' -Force
 }
 Else{$stepCounter++}
 
@@ -1322,63 +1459,19 @@ If($DisableAllNotifications)
         "Windows.SystemToast.HelloFace"="Windows Hello Notifications"
         "Windows.SystemToast.WiFiNetworkManager"="Wireless Notifications"
     }   
-    Show-ProgressStatus -Message "Disabling Toast Notifications" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Toast Notifications" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Show-ProgressStatus -Message "Disabling Toast Notifications" -SubMessage ("for user profile ({0} of {1})" -f $p,$UserProfiles.count) -Step $p -MaxStep $UserProfiles.count -Outhost
-
-        $i = 1
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            #Parent path to registry
-            $settingspath = "HKU:\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Notifications\Settings"
-            
-            #loop each notification    
-            Foreach ($key in $notifications.GetEnumerator()){
-                #write-host ("`"{1}`"=`"{0}`"" -f $key.Key,$key.Value)
-
-                Write-LogEntry ("Disabling Notification message [{0}] for User [{1}]..." -f $key.Value,$UserID) -Outhost
-                
-                Write-Progress -Id 2 -Activity ("Notification message ({0} of {1})" -f $i,$notifications.count) -Status ("Disabling Notification ({0}] for profile [{1})" -f $key.Value,$UserID) -CurrentOperation "Disabling Notification" -PercentComplete ($i / $notifications.count * 100) -ParentId 1
-                
-                Set-SystemSettings -Path ($settingspath + "\" + $key.Key) -Name Enabled -Value 0 -Type DWord -Force
-
-                Write-LogEntry ("Disabling Toast notifications to the lock screen for user: {0}" -f $UserProfile.SID) -Severity 1 -Outhost
-                Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name NoToastApplicationNotificationOnLockScreen -Type DWord -Value '1' -Force
-
-                $i++
-            }
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
+    #loop each notification    
+    Foreach ($key in $notifications.GetEnumerator()){  
+        Set-UserSetting -Message ("Disabling {0} notification" -f $key.Key) -Path ("SOFTWARE\Microsoft\Windows\CurrentVersion\Notifications\Settings\" + $key.Key) -Name Enabled -Value 0 -Type DWord -Force
     }
+    Set-UserSetting -Message "Disabling Toast notifications to the lock screen" -Path "SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name 'NoToastApplicationNotificationOnLockScreen' -Type DWord -Value '1' -Force -TryLGPO:$true
 
-    Write-LogEntry "Disabling Non-critical Notifications from Windows Security..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Notifications' -Name DisableEnhancedNotifications -Type DWord -Value '1' -Force -TryLGPO:$true
+    Write-LogEntry "Disabling Non-critical Notifications from Windows Security..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Notifications' -Name DisableEnhancedNotifications -Type DWord -Value '1' -Force -TryLGPO:$true
 
-    Write-LogEntry "Disabling All Notifications from Windows Security using..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Notifications' -Name DisableNotifications -Type DWord -Value '1' -Force -TryLGPO:$true
+    Write-LogEntry "Disabling All Notifications from Windows Security using..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Notifications' -Name DisableNotifications -Type DWord -Value '1' -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -1387,8 +1480,8 @@ If ($DisabledIEFirstRunWizard)
 {
 	# Disable IE First Run Wizard
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:40] :: "}
-    Show-ProgressStatus -Message ("{0}Disabling IE First Run Wizard" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main' -Name DisableFirstRunCustomize -Type DWord -Value '1' -Force -TryLGPO:$true
+    Show-ProgressStatus -Message ("{0}Disabling IE First Run Wizard" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main' -Name 'DisableFirstRunCustomize' -Type DWord -Value '1' -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -1396,10 +1489,10 @@ Else{$stepCounter++}
 If ($DisableWMPFirstRunWizard)
 {
 	# Disable IE First Run Wizard
-    Show-ProgressStatus -Message "Disabling Media Player First Run Wizard" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost	
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\MediaPlayer\Preferences' -Name AcceptedEULA -Type DWord -Value '1' -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\MediaPlayer\Preferences' -Name FirstTime -Type DWord -Value '1' -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer' -Name GroupPrivacyAcceptance -Type DWord -Value '1' -Force -TryLGPO:$true
+    Show-ProgressStatus -Message "Disabling Media Player First Run Wizard" -Step ($stepCounter++) -MaxStep $script:Maxsteps	
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\MediaPlayer\Preferences' -Name AcceptedEULA -Type DWord -Value '1' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\MediaPlayer\Preferences' -Name FirstTime -Type DWord -Value '1' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer' -Name GroupPrivacyAcceptance -Type DWord -Value '1' -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -1407,10 +1500,10 @@ Else{$stepCounter++}
 If($EnableSecureLogonCtrlAltDelete)
 {
   	# Disable IE First Run Wizard
-	Show-ProgressStatus -Message "Enabling Secure Logon Screen Settings..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name DisableCAD -Type DWord -Value '0' -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name DontDisplayLastUserName -Type DWord -Value '1' -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name BlockDomainPicturePassword -Type DWord -Value '1' -Force
+	Show-ProgressStatus -Message "Enabling Secure Logon Screen Settings..." -Step ($stepCounter++) -MaxStep $script:Maxsteps
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name DisableCAD -Type DWord -Value '0' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name DontDisplayLastUserName -Type DWord -Value '1' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name BlockDomainPicturePassword -Type DWord -Value '1' -Force
 }
 Else{$stepCounter++}
 
@@ -1418,8 +1511,8 @@ Else{$stepCounter++}
 # Disable New Network dialog box
 If ($DisableNewNetworkDialog)
 {
-    Show-ProgressStatus -Message "Disabling New Network Dialog" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSettings 'HKLM:\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet' -Name 'EnableActiveProbing' -Type DWord -Value '0' -Force
+    Show-ProgressStatus -Message "Disabling New Network Dialog" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting 'HKLM:\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet' -Name 'EnableActiveProbing' -Type DWord -Value '0' -Force
 }
 Else{$stepCounter++}
 
@@ -1439,7 +1532,7 @@ If($RemoveActiveSetupComponents){
         "{89B4C1CD-B018-4511-B0A1-5476DBF70820}"="211:DOTNETFRAMEWORKS"
         ">{22d6f312-b0f6-11d0-94ab-0080c74c7e95}"="212:WMPACCESS"
     }
-    Show-ProgressStatus -Message "Disabling Active Setup components" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Active Setup components" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     $i = 1
 
     Foreach ($key in $activeComponentsGUID.GetEnumerator()){
@@ -1447,14 +1540,14 @@ If($RemoveActiveSetupComponents){
         If($ColonSplit){
             $OSODID = ($key.Value).split(":")[0]
             $ACName = ($key.Value).split(":")[1]
-            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Feature..." -f $OSODID,$ACName) -Outhost
+            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Feature..." -f $OSODID,$ACName)
         }
         Else{
             $ACName = $key.Value
-            Write-LogEntry ("{0}Disabling Active Setup components [{1}]..." -f $prefixmsg,$ACName) -Outhost
+            Write-LogEntry ("{0}Disabling Active Setup components [{1}]..." -f $prefixmsg,$ACName)
         }
 
-        Show-ProgressStatus -Message "Disabling Active Setup components" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$activeComponentsGUID.count,$ACName) -Step $i -MaxStep $activeComponentsGUID.count -Outhost
+        Show-ProgressStatus -Message "Disabling Active Setup components" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$activeComponentsGUID.count,$ACName) -Step $i -MaxStep $activeComponentsGUID.count
 
         If(Test-Path "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\$($key.Key)" ){
             Remove-ItemProperty -Path ('HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\' + $key.Key) -Name 'StubPath' -Force -ErrorAction SilentlyContinue | Out-Null
@@ -1484,7 +1577,7 @@ If ($DisabledUnusedFeatures)
             "Xps-Foundation-Xps-Viewer"="70:Xps Foundation"
         }
     }
-    Show-ProgressStatus -Message "Disabling Unused Features" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Unused Features" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     $i = 1
     Foreach ($key in $features.GetEnumerator()){
@@ -1499,14 +1592,14 @@ If ($DisabledUnusedFeatures)
             If($OptimizeForVDI){$prefixmsg = ("VDI Optimizations - UnusedFeatures :: ")}   
         }
 
-        Show-ProgressStatus -Message "Disabling Unused Features" -SubMessage ("{2} ({0} of {1})" -f $i,$features.count,$FeatName) -Step $i -MaxStep $features.count -Outhost
+        Show-ProgressStatus -Message "Disabling Unused Features" -SubMessage ("{2} ({0} of {1})" -f $i,$features.count,$FeatName) -Step $i -MaxStep $features.count
 
         Try{
-            Write-LogEntry ("{0}UnusedFeatures :: Disabling {1} Feature..." -f $prefixmsg,$FeatName) -Outhost
+            Write-LogEntry ("{0}UnusedFeatures :: Disabling {1} Feature..." -f $prefixmsg,$FeatName)
             Disable-WindowsOptionalFeature -FeatureName $key.Key -Online -NoRestart -ErrorAction Stop | Out-Null
         }
         Catch [System.Management.Automation.ActionPreferenceStopException]{
-            Write-LogEntry ("Unable to Remove {0} Feature: {1}" -f $FeatName,$_) -Severity 3 -Outhost
+            Write-LogEntry ("Unable to Remove {0} Feature: {1}" -f $FeatName,$_) -Severity 3
         }
 
         Start-Sleep -Seconds 10
@@ -1514,7 +1607,7 @@ If ($DisabledUnusedFeatures)
             
     }
     
-    Write-LogEntry "Removing Default Fax Printer..." -Severity 1 -Outhost
+    Write-LogEntry "Removing Default Fax Printer..."
     Remove-Printer -Name "Fax" -ErrorAction SilentlyContinue
 }
 Else{$stepCounter++}
@@ -1614,15 +1707,15 @@ If ($DisabledUnusedServices)
                 $SvcName = $key.Value
                 If($OptimizeForVDI){$prefixmsg = ("VDI Optimizations - UnusedServices :: ")}
             }
-            Write-LogEntry ("{0}Disabling {1} Service [{2}]..." -f $prefixmsg,$SvcName,$key.Key) -Outhost
+            Write-LogEntry ("{0}Disabling {1} Service [{2}]..." -f $prefixmsg,$SvcName,$key.Key)
 
-            Show-ProgressStatus -Message "Disabling Internet Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$ACName) -Step $i -MaxStep $services.count -Outhost
+            Show-ProgressStatus -Message "Disabling Internet Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$SvcName) -Step $i -MaxStep $services.count
 
             Try{
                 Set-Service $key.Key -StartupType Disabled -ErrorAction Stop | Out-Null
             }
             Catch [System.Management.Automation.ActionPreferenceStopException]{
-                Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
+                Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3
             }
 
             Start-Sleep -Seconds 10
@@ -1648,7 +1741,7 @@ namespace WinAPI
             Set-Service TabletInputService -StartupType Disabled -ErrorAction Stop | Out-Null
         }
         Catch [System.Management.Automation.ActionPreferenceStopException]{
-            Write-LogEntry ("Unable to disable Tablet Service: {0}" -f $_) -Severity 3 -Outhost
+            Write-LogEntry ("Unable to disable Tablet Service: {0}" -f $_) -Severity 3
         }
     }
 
@@ -1692,20 +1785,20 @@ If ($DisableInternetServices -and $OptimizeForVDI)
         If($ColonSplit){
             $OSODID = ($key.Value).split(":")[0]
             $SvcName = ($key.Value).split(":")[1]
-            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key) -Severity 1 -Outhost
+            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key)
         }
         Else{
             $SvcName = $key.Value
-            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key) -Severity 1 -Outhost
+            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key)
         }
 
-        Show-ProgressStatus -Message "Disabling Internet Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$ACName) -Step $i -MaxStep $services.count -Outhost
+        Show-ProgressStatus -Message "Disabling Internet Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$SvcName) -Step $i -MaxStep $services.count
 
         Try{
             Set-Service $key.Key -StartupType Disabled -ErrorAction Stop | Out-Null
         }
         Catch [System.Management.Automation.ActionPreferenceStopException]{
-            Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
+            Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3
         }
 
         Start-Sleep -Seconds 10
@@ -1729,37 +1822,37 @@ If($DisableSmartCardLogon){
         If($ColonSplit){
             $OSODID = ($key.Value).split(":")[0]
             $SvcName = ($key.Value).split(":")[1]
-            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key) -Severity 1 -Outhost
+            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key)
         }
         Else{
             $SvcName = $key.Value
-            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key) -Severity 1 -Outhost
+            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key)
         }
 
-        Show-ProgressStatus -Message "Disabling SmartCard Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$SvcName) -Step $i -MaxStep $services.count -Outhost
+        Show-ProgressStatus -Message "Disabling SmartCard Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$SvcName) -Step $i -MaxStep $services.count
 
         Try{
             Set-Service $key.Key -StartupType Disabled -ErrorAction Stop | Out-Null
         }
         Catch [System.Management.Automation.ActionPreferenceStopException]{
-            Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
+            Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3
         }
 
         Start-Sleep -Seconds 10
         $i++
     }
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'SCForeOption' -Type DWord -Value '0' -Force -TryLGPO:$true 
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'SCForeOption' -Type DWord -Value '0' -Force -TryLGPO:$true 
 }
 Else{
     <#
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'DisplayEmptySmartCardTileWhenNoReader' -Type DWord -Value '1' -Force -TryLGPO:$true
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'SmartCardCredentialProvider' -Type DWord -Value '1' -Force -TryLGPO:$true  
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'DisplayEmptySmartCardTileWhenNoReader' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'SmartCardCredentialProvider' -Type DWord -Value '1' -Force -TryLGPO:$true  
     #HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\
     #ActivClient Provider = {05A69B2E-F05A-426b-BB43-7895A67B1A56}
     #Microsoft smartcard credential provider = {8FD7E19C-3BF7-489B-A72C-846AB3678C96}
 
-    Write-LogEntry "Configuring Smart Card removal to Force Logoff..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force
+    Write-LogEntry "Configuring Smart Card removal to Force Logoff..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force
     #> 
     $stepCounter++
 }
@@ -1782,48 +1875,54 @@ If ($DisableDefender)
         If($ColonSplit){
             $OSODID = ($key.Value).split(":")[0]
             $SvcName = ($key.Value).split(":")[1]
-            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key) -Severity 1 -Outhost
+            Write-LogEntry ("VDI Optimizations [OSOT ID:{0}] :: Disabling {1} Service [{2}]..." -f $OSODID,$SvcName,$key.Key)
         }
         Else{
             $SvcName = $key.Value
-            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key) -Severity 1 -Outhost
+            Write-LogEntry ("Disabling {0} Service [{1}]..." -f $SvcName,$key.Key)
         }
 
-        Show-ProgressStatus -Message "Disabling Defender Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$SvcName) -Step $i -MaxStep $services.count -Outhost
+        Show-ProgressStatus -Message "Disabling Defender Service" -SubMessage ("Removing: {2} ({0} of {1})" -f $i,$services.count,$SvcName) -Step $i -MaxStep $services.count
 
         Try{
             Set-Service $key.Key -StartupType Disabled -ErrorAction Stop | Out-Null
         }
         Catch [System.Management.Automation.ActionPreferenceStopException]{
-            Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3 -Outhost
+            Write-LogEntry ("Unable to Disable {0} Service: {1}" -f $SvcName,$_) -Severity 3
         }
         
         Start-Sleep -Seconds 10
         $i++
     }
 
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Name "DisableAntiSpyware" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Systray" -Name "HideSystray" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" -Name "SpynetReporting" -Type DWord -Value 0 -Force -TryLGPO:$true
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" -Name "SubmitSamplesConsent" -Type DWord -Value 2 -Force -TryLGPO:$true
-    If ([System.Environment]::OSVersion.Version.Build -eq 14393) {
-		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsDefender" -ErrorAction SilentlyContinue
-	} ElseIf ([System.Environment]::OSVersion.Version.Build -ge 15063) {
-		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "SecurityHealth" -ErrorAction SilentlyContinue
-	}
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Name "DisableAntiSpyware" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Systray" -Name "HideSystray" -Type DWord -Value 1 -Force -TryLGPO:$true
+    If ($OSBuildNumber -eq 14393) {
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsDefender" -ErrorAction SilentlyContinue
+    } 
+    ElseIf ($OSBuildNumber -ge 15063) {
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "SecurityHealth" -ErrorAction SilentlyContinue
+    }
+
+    Write-LogEntry "Disabling Malicious Software Removal Tool offering"
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MRT" -Name "DontOfferThroughWUAU" -Type DWord -Value 1 -Force -TryLGPO:$true
+
+    Write-LogEntry "Disabling Windows Defender Cloud..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" -Name "SpynetReporting" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet" -Name "SubmitSamplesConsent" -Type DWord -Value 2 -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
 
 If ($EnableRemoteRegistry)
 {
-    Show-ProgressStatus -Message "Enabling Remote registry services" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling Remote registry services" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     Try{
         Get-Service 'RemoteRegistry' |Set-Service  -StartupType Automatic -ErrorAction Stop
         Start-Service 'RemoteRegistry' -ErrorAction Stop
     }
     Catch [System.Management.Automation.ActionPreferenceStopException]{
-        Write-LogEntry ("Unable to enable Remote registry: {0}" -f $_) -Severity 3 -Outhost
+        Write-LogEntry ("Unable to enable Remote registry: {0}" -f $_) -Severity 3
     }
 }
 Else{$stepCounter++}
@@ -1831,13 +1930,13 @@ Else{$stepCounter++}
 
 If ($DisableWireless -or $OptimizeForVDI)
 {
-    Show-ProgressStatus -Message "Disabling Wireless Services" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Wireless Services" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     Try{
         Get-Service 'wcncsvc' | Set-Service -StartupType Disabled -ErrorAction Stop
         Get-Service 'WwanSvc' | Set-Service -StartupType Disabled -ErrorAction Stop
     }
     Catch [System.Management.Automation.ActionPreferenceStopException]{
-        Write-LogEntry ("Unable to Disable Wireless Services: {0}" -f $_) -Severity 3 -Outhost
+        Write-LogEntry ("Unable to Disable Wireless Services: {0}" -f $_) -Severity 3
     }
 }
 Else{$stepCounter++}
@@ -1845,7 +1944,7 @@ Else{$stepCounter++}
 
 If ($DisableBluetooth -or $OptimizeForVDI)
 {
-    Show-ProgressStatus -Message "Disabling Bluetooth" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Bluetooth" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     
     Config-Bluetooth -DeviceStatus Off
 }
@@ -1855,7 +1954,7 @@ Else{$stepCounter++}
 # Disable Scheduled Tasks
 If ($DisableSchTasks)
 {
-    Show-ProgressStatus -Message "Disabling Scheduled Tasks" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Scheduled Tasks" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     
 	$scheduledtasks = @{
         "Microsoft Application Experience\Microsoft Compatibility Appraiser Scheduled Task"="\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser"
@@ -1878,7 +1977,7 @@ If ($DisableSchTasks)
     }
 
     Foreach ($task in $scheduledtasks.GetEnumerator()){
-        Write-LogEntry ('Disabling [{0}]' -f $task.Key) -Severity 1 -Outhost
+        Write-LogEntry ('Disabling [{0}]' -f $task.Key)
         Disable-ScheduledTask -TaskName $task.Value -ErrorAction SilentlyContinue | Out-Null
     }
 
@@ -1913,7 +2012,7 @@ If ($DisableSchTasks)
         }
 
         Foreach ($task in $AdditionalScheduledTasks.GetEnumerator()){
-            Write-LogEntry ('Disabling [{0}] for VDI' -f $task.Key) -Severity 1 -Outhost
+            Write-LogEntry ('Disabling [{0}] for VDI' -f $task.Key)
             Disable-ScheduledTask -TaskName $task.Value -ErrorAction SilentlyContinue | Out-Null
         }    }
 }
@@ -1923,55 +2022,24 @@ Else{$stepCounter++}
 If ($DisableCortana)
 {
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:33] :: "}
-    Show-ProgressStatus -Message ("{0}Disabling Cortana" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("{0}Disabling Cortana" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -Type DWord -Value '0' -Force -TryLGPO:$true
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -Type DWord -Value '0' -Force -TryLGPO:$true
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:14] :: "}
-    Write-LogEntry ("{0}Disabling Search option in taskbar" -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'SearchboxTaskbarMode' -Type DWord -Value '0' -Force	
+    Write-LogEntry ("{0}Disabling Search option in taskbar" -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'SearchboxTaskbarMode' -Type DWord -Value '0' -Force	
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:42] :: " -f $prefixmsg}
-    Write-LogEntry ("{0}Disabling search and Cortana to use location") -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowSearchToUseLocation' -Type DWord -Value '0' -Force -TryLGPO:$true    
+    Write-LogEntry ("{0}Disabling search and Cortana to use location")
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowSearchToUseLocation' -Type DWord -Value '0' -Force -TryLGPO:$true    
     
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Disabling Cortana for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry ("Disabling Cortana for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "CortanaConsent" -Type DWord -Value 0 -Force 
-        
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Personalization\Settings" -Name "AcceptedPrivacyPolicy" -Type DWord -Value 0 -Force 
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitTextCollection" -Type DWord -Value 1 -Force 
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitInkCollection" -Type DWord -Value 1 -Force 
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\InputPersonalization\TrainedDataStore" -Name "HarvestContacts" -Type DWord -Value 0 -Force 
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
-
+    Write-LogEntry ("Disabling Cortana for {0}..." -f $ApplyTo)
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "CortanaConsent" -Type DWord -Value 0 -Force 
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Personalization\Settings" -Name "AcceptedPrivacyPolicy" -Type DWord -Value 0 -Force 
+    Set-UserSetting -Path "SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitTextCollection" -Type DWord -Value 1 -Force 
+    Set-UserSetting -Path "SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitInkCollection" -Type DWord -Value 1 -Force 
+    Set-UserSetting -Path "SOFTWARE\Microsoft\InputPersonalization\TrainedDataStore" -Name "HarvestContacts" -Type DWord -Value 0 -Force 
     
 }
 Else{$stepCounter++}
@@ -1980,50 +2048,19 @@ Else{$stepCounter++}
 If($DisableInternetSearch){
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:12] :: "}
-    Show-ProgressStatus -Message ("{0}Disabling Bing Search" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("{0}Disabling Bing Search" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'BingSearchEnabled' -Type DWord -Value '0' -Force -TryLGPO:$true
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'BingSearchEnabled' -Type DWord -Value '0' -Force -TryLGPO:$true
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:47] :: "}
-    Write-LogEntry ("Disable search web when searching pc" -f $prefixmsg) -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'ConnectedSearchUseWeb' -Type DWord -Value '0' -Force -TryLGPO:$true
+    Write-LogEntry ("Disable search web when searching pc" -f $prefixmsg)
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'ConnectedSearchUseWeb' -Type DWord -Value '0' -Force -TryLGPO:$true
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:55] :: "}
-    Write-LogEntry ("{0}Disabling Web Search in search bar" -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'DisableWebSearch' -Type DWord -Value '0' -Force -TryLGPO:$true 
+    Write-LogEntry ("{0}Disabling Web Search in search bar" -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'DisableWebSearch' -Type DWord -Value '0' -Force -TryLGPO:$true 
     
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Disabling Bing Search for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry ("Disabling Bing Search for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "BingSearchEnabled" -Type DWord -Value 0
-	     }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
-
+    Set-UserSetting -Message "Disabling Bing Search" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "BingSearchEnabled" -Type DWord -Value 0 
 }
 Else{$stepCounter++}
 
@@ -2032,164 +2069,148 @@ Else{$stepCounter++}
 # See: https://docs.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services
 If ($ApplyPrivacyMitigations)
 {
-    Show-ProgressStatus -Message "Disabling Privacy Mitigations" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Privacy Mitigations" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Write-LogEntry "Privacy Mitigations :: Disabling customer experience improvement program..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
-
-    Write-LogEntry "Privacy Mitigations :: Disabling sending settings to cloud..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync' -Name 'DisableSettingSync' -Type DWord -Value 2 -Force -TryLGPO:$true
     
-    Write-LogEntry "Privacy Mitigations :: Disabling synchronizing files to cloud..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync' -Name 'DisableSettingSyncUserOverride' -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Privacy Mitigations :: Disabling NCSI active test..."
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator" -Name "NoActiveProbe" -Type DWord -Value '0' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Disabling automatic installation of network devices..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\NcdAutoSetup\Private" -Name "AutoSetup" -Type DWord -Value 0 -Force
 
-    Write-LogEntry "Privacy Mitigations :: Disabling sending additional info with error reports..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting' -Name 'DontSendAdditionalData' -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Privacy Mitigations :: Disabling customer experience improvement program..."
+	Set-SystemSetting -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
 
-	Write-LogEntry "Privacy Mitigations :: Disallowing the user to change sign-in options..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowSignInOptions' -Type DWord -Value '0' -Force
+    Write-LogEntry "Privacy Mitigations :: Disabling sending settings to cloud..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync' -Name 'DisableSettingSync' -Type DWord -Value 2 -Force -TryLGPO:$true
+    
+    Write-LogEntry "Privacy Mitigations :: Disabling synchronizing files to cloud..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync' -Name 'DisableSettingSyncUserOverride' -Type DWord -Value 1 -Force -TryLGPO:$true
+
+    Write-LogEntry "Privacy Mitigations :: Disabling sending additional info with error reports..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting' -Name 'DontSendAdditionalData' -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting" -Name "Disabled" -Type DWord -Value 1 -Force
+
+	Write-LogEntry "Privacy Mitigations :: Disallowing the user to change sign-in options..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowSignInOptions' -Type DWord -Value '0' -Force
 	
-    Write-LogEntry "Privacy Mitigations :: Disabling Microsoft accounts for modern style apps..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'MSAOptional' -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Privacy Mitigations :: Disabling Microsoft accounts for modern style apps..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'MSAOptional' -Value 1 -Force -TryLGPO:$true
 
 	# Disable the Azure AD Sign In button in the settings app
-	Write-LogEntry "Privacy Mitigations :: Disabling Sending data to Microsoft for Application Compatibility Program Inventory..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppCompat' -Name 'DisableInventory' -Type DWord -Value '1' -Force -TryLGPO:$true
+	Write-LogEntry "Privacy Mitigations :: Disabling Sending data to Microsoft for Application Compatibility Program Inventory..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppCompat' -Name 'DisableInventory' -Type DWord -Value '1' -Force -TryLGPO:$true
 	
-	Write-LogEntry "Privacy Mitigations :: Disabling the Microsoft Account Sign-In Assistant..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'NoConnectedUser' -Type DWord -Value '3' -Force
+	Write-LogEntry "Privacy Mitigations :: Disabling the Microsoft Account Sign-In Assistant..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'NoConnectedUser' -Type DWord -Value '3' -Force
 	
 	# Disable the MSA Sign In button in the settings app
-	Write-LogEntry "Privacy Mitigations :: Disabling MSA sign-in options..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowYourAccount' -Type DWord -Value '0' -Force
+	Write-LogEntry "Privacy Mitigations :: Disabling MSA sign-in options..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings' -Name 'AllowYourAccount' -Type DWord -Value '0' -Force
 	
-	Write-LogEntry "Privacy Mitigations :: Disabling camera usage on user's lock screen..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenCamera' -Type DWord -Value '1' -Force -TryLGPO:$true
+	Write-LogEntry "Privacy Mitigations :: Disabling camera usage on user's lock screen..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenCamera' -Type DWord -Value '1' -Force -TryLGPO:$true
 	
-    Write-LogEntry "Privacy Mitigations :: Disabling lock screen slideshow..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenSlideshow' -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Privacy Mitigations :: Disabling lock screen slideshow..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenSlideshow' -Value 1 -Force -TryLGPO:$true
+    
+    Write-LogEntry "Privacy Mitigations :: Disabling Consumer Features..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableWindowsConsumerFeatures' -Type DWord -Value '1' -Force -TryLGPO:$true
 
-    Write-LogEntry "Privacy Mitigations :: Disabling Consumer Features..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableWindowsConsumerFeatures' -Type DWord -Value '1' -Force -TryLGPO:$true
-
-
-    Write-LogEntry "Privacy Mitigations :: Disable the `"how to use Windows`" contextual popups" -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableSoftLanding' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Write-LogEntry "Privacy Mitigations :: Disable the `"how to use Windows`" contextual popups"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableSoftLanding' -Type DWord -Value '1' -Force -TryLGPO:$true
 
 	# Offline maps
-	Write-LogEntry "Privacy Mitigations :: Turning off unsolicited network traffic on the Offline Maps settings page..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AllowUntriggeredNetworkTrafficOnSettingsPage' -Type DWord -Value '0' -Force -TryLGPO:$true
+	Write-LogEntry "Privacy Mitigations :: Turning off unsolicited network traffic on the Offline Maps settings page..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AllowUntriggeredNetworkTrafficOnSettingsPage' -Type DWord -Value '0' -Force -TryLGPO:$true
 
-	Write-LogEntry "Privacy Mitigations :: Turning off Automatic Download and Update of Map Data..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AutoDownloadAndUpdateMapData' -Type DWord -Value '0' -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SYSTEM\Maps" -Name "AutoUpdateEnabled" -Type DWord -Value 0	-Force
+	Write-LogEntry "Privacy Mitigations :: Turning off Automatic Download and Update of Map Data..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps' -Name 'AutoDownloadAndUpdateMapData' -Type DWord -Value '0' -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SYSTEM\Maps" -Name "AutoUpdateEnabled" -Type DWord -Value 0	-Force
 
 	# Microsoft Edge
-	Write-LogEntry "Privacy Mitigations :: Enabling Do Not Track in Microsoft Edge..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'DoNotTrack' -Type DWord -Value '1' -Force -TryLGPO:$true
+	Write-LogEntry "Privacy Mitigations :: Enabling Do Not Track in Microsoft Edge..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'DoNotTrack' -Type DWord -Value '1' -Force -TryLGPO:$true
 	
-	Write-LogEntry "Privacy Mitigations :: Disallow web content on New Tab page in Microsoft Edge..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\SearchScopes' -Name 'AllowWebContentOnNewTabPage' -Type DWord -Value '0' -Force
+	Write-LogEntry "Privacy Mitigations :: Disallow web content on New Tab page in Microsoft Edge..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\SearchScopes' -Name 'AllowWebContentOnNewTabPage' -Type DWord -Value '0' -Force
 	
 	# General stuff
-	Write-LogEntry "Privacy Mitigations :: Turning off the advertising ID..." -Severity 1 -Outhost
-	#Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -Type DWord -Value '0' -Force
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" -Name "DisabledByGroupPolicy" -Type DWord -Value 1 -Force -TryLGPO:$true
+	Write-LogEntry "Privacy Mitigations :: Turning off the advertising ID..."
+	#Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -Type DWord -Value '0' -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" -Name "DisabledByGroupPolicy" -Type DWord -Value 1 -Force -TryLGPO:$true
 
-	Write-LogEntry "Privacy Mitigations :: Turning off location..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessLocation' -Type DWord -Value '0' -Force -TryLGPO:$true
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors' -Name 'DisableLocation' -Type DWord -Value '0' -Force -TryLGPO:$true
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Name "Value" -Type String -Value "Deny" -Force 
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}" -Name "SensorPermissionState" -Type DWord -Value 0 -Force 
-	Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Services\lfsvc\Service\Configuration" -Name "Status" -Type DWord -Value 0 -Force 
+	Write-LogEntry "Privacy Mitigations :: Turning off Location Tracking..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessLocation' -Type DWord -Value '0' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors' -Name 'DisableLocation' -Type DWord -Value '0' -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location" -Name "Value" -Type String -Value "Deny" -Force 
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}" -Name "SensorPermissionState" -Type DWord -Value 0 -Force 
+	Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\lfsvc\Service\Configuration" -Name "Status" -Type DWord -Value 0 -Force 
 
 	# Stop getting to know me
-	Write-LogEntry "Privacy Mitigations :: Turning off automatic learning..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\InputPersonalization' -Name 'RestrictImplicitInkCollection' -Type DWord -Value '1' -Force -TryLGPO:$true
+	Write-LogEntry "Privacy Mitigations :: Turning off automatic learning..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\InputPersonalization' -Name 'RestrictImplicitInkCollection' -Type DWord -Value '1' -Force -TryLGPO:$true
 	# Turn off updates to the speech recognition and speech synthesis models
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Speech_OneCore\Preferences' -Name 'ModelDownloadAllowed' -Type DWord -Value '0' -Force
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Speech_OneCore\Preferences' -Name 'ModelDownloadAllowed' -Type DWord -Value '0' -Force
 	
-	Write-LogEntry "Privacy Mitigations :: Disallowing Windows apps to access account information..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessAccountInfo' -Type DWord -Value '2' -Force -TryLGPO:$true
+	Write-LogEntry "Privacy Mitigations :: Disallowing Windows apps to access account information..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessAccountInfo' -Type DWord -Value '2' -Force -TryLGPO:$true
 
-    Write-LogEntry "Privacy Mitigations :: Disabling Xbox features..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name "AllowGameDVR" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Write-LogEntry "Privacy Mitigations :: Disabling Xbox features..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name "AllowGameDVR" -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Write-LogEntry "Privacy Mitigations :: Disabling WiFi Sense..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" -Name "Value" -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" -Name "Value" -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config" -Name "AutoConnectAllowedOEM" -Type DWord -Value 0
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config" -Name "WiFISenseAllowed" -Type DWord -Value 0
+    Write-LogEntry "Privacy Mitigations :: Disabling WiFi Sense..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting" -Name "Value" -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots" -Name "Value" -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config" -Name "AutoConnectAllowedOEM" -Type DWord -Value 0
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config" -Name "WiFISenseAllowed" -Type DWord -Value 0
 
-    Write-LogEntry "Privacy Mitigations :: Disabling all feedback notifications..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Write-LogEntry "Privacy Mitigations :: Disabling all feedback notifications..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value '1' -Force -TryLGPO:$true
 
     If($OptimizeForVDI){$prefixmsg += "VDI Optimizations [OSOT ID:53] :: "}
-	Write-LogEntry ("Privacy Mitigations :: {0}Disabling telemetry..." -f $prefixmsg) -Outhost
+	Write-LogEntry ("Privacy Mitigations :: {0}Disabling telemetry..." -f $prefixmsg)
 	$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
 	If ($OsCaption -like "*Enterprise*" -or $OsCaption -like "*Education*"){
 		$TelemetryLevel = "0"
-		Write-LogEntry "Privacy Mitigations :: Enterprise edition detected. Supported telemetry level: Security." -Severity 1 -Outhost
+		Write-LogEntry "Privacy Mitigations :: Enterprise edition detected. Supported telemetry level: Security."
 	}
 	Else{
 		$TelemetryLevel = "1"
-		Write-LogEntry "Privacy Mitigations :: Lowest supported telemetry level: Basic." -Severity 1 -Outhost
+		Write-LogEntry "Privacy Mitigations :: Lowest supported telemetry level: Basic."
 	}
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force -TryLGPO:$true
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\Software Protection Platform" -Name "NoGenTicket" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\Software Protection Platform" -Name "NoGenTicket" -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Privacy Mitigations Settings for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
+    Write-LogEntry "Privacy Mitigations :: Hiding 'Share' context menu item"
+    Remove-Item -LiteralPath "HKCR:\*\shellex\ContextMenuHandlers\Sharing" -ErrorAction SilentlyContinue
+	Remove-Item -Path "HKCR:\Directory\Background\shellex\ContextMenuHandlers\Sharing" -ErrorAction SilentlyContinue
+	Remove-Item -Path "HKCR:\Directory\shellex\ContextMenuHandlers\Sharing" -ErrorAction SilentlyContinue
+	Remove-Item -Path "HKCR:\Drive\shellex\ContextMenuHandlers\Sharing" -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath "HKCR:\*\shellex\ContextMenuHandlers\ModernSharing" -ErrorAction SilentlyContinue
 
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry ("Privacy Mitigations :: Disabling Tailored Experiences for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableTailoredExperiencesWithDiagnosticData" -Type DWord -Value 1 -Force
-        
-            Write-Output "Disabling Website Access to Language List..."
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\International\User Profile" -Name "HttpAcceptLanguageOptOut" -Type DWord -Value 1 -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    Set-UserSetting -Message "Privacy Mitigations :: Disabling Tailored Experiences" -Path "SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableTailoredExperiencesWithDiagnosticData" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-UserSetting -Message "Privacy Mitigations :: Hiding Microsoft Account Protection warning" "SOFTWARE\Microsoft\Windows Security Health\State" -Name "AccountProtection_MicrosoftAccount_Disconnected" -Type DWord -Value 1 -Force 
+	Set-UserSetting -Message "Privacy Mitigations :: Disabling Website Access to Language List" -Path "Control Panel\International\User Profile" -Name "HttpAcceptLanguageOptOut" -Type DWord -Value 1 -Force 
+    Set-UserSetting -Path "SOFTWARE\Microsoft\GameBar" -Name "AutoGameModeEnabled" -Type DWord -Value 0 
+	Set-UserSetting -Path "System\GameConfigStore" -Name "GameDVR_Enabled" -Type DWord -Value 0 
 
 }
 Else{$stepCounter++}
 
 If($DisablePreviewBuild)
 {
-    Write-LogEntry "Disabling PreviewBuilds capability" -Severity 1 -Outhost
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "AllowBuildPreview" -Type DWord -Value 0 -Force -TryLGPO:$true
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "EnableConfigFlighting" -Type DWord -Value 0 -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "EnableExperimentation" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Write-LogEntry "Disabling PreviewBuilds capability"
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "AllowBuildPreview" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "EnableConfigFlighting" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PreviewBuilds" -Name "EnableExperimentation" -Type DWord -Value 0 -Force -TryLGPO:$true
 }
 
 If ($EnableWinRM)
 {
-    Show-ProgressStatus -Message "Enabling WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     $networkListManager = [Activator]::CreateInstance([Type]::GetTypeFromCLSID([Guid]"{DCB00C01-570F-4A9B-8D69-199FDBA5723B}")) 
     $connections = $networkListManager.GetNetworkConnections() 
@@ -2231,7 +2252,7 @@ If ($EnableWinRM)
 
     }
     Catch{
-        Write-LogEntry ("Unable to setup WinRM: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Outhost
+        Write-LogEntry ("Unable to setup WinRM: {0}" -f $_.Exception.ErrorMessage) -Severity 3
     }
 }
 Else{$stepCounter++}
@@ -2239,40 +2260,40 @@ Else{$stepCounter++}
 
 If($EnableStrictUAC)
 {
-    Show-ProgressStatus -Message "Enabling strict UAC Level" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling strict UAC Level" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Write-LogEntry "Enabling UAC prompt administrators for consent on the secure desktop..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -Type DWord -Value 2 -Force -TryLGPO:$true
+    Write-LogEntry "Enabling UAC prompt administrators for consent on the secure desktop..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -Type DWord -Value 2 -Force -TryLGPO:$true
     
-    Write-LogEntry "Disabling elevation UAC prompt User for consent on the secure desktop..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorUser -Type DWord -Value 0 -Force -TryLGPO:$true
+    Write-LogEntry "Disabling elevation UAC prompt User for consent on the secure desktop..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorUser -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Write-LogEntry "Enabling elevation UAC prompt detect application installations and prompt for elevation..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableInstallerDetection" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Enabling elevation UAC prompt detect application installations and prompt for elevation..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableInstallerDetection" -Type DWord -Value 1 -Force -TryLGPO:$true
     
-    Write-LogEntry "Enabling elevation UAC UIAccess applications that are installed in secure locations..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableSecureUAIPaths" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Enabling elevation UAC UIAccess applications that are installed in secure locations..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableSecureUAIPaths" -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Write-LogEntry "Enabling Enable virtualize file and registry write failures to per-user locations.." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualization" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Enabling Enable virtualize file and registry write failures to per-user locations.."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualization" -Type DWord -Value 1 -Force -TryLGPO:$true
         
-    Write-LogEntry "Enabling UAC for all administrators..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Enabling UAC for all administrators..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Write-LogEntry "Filter Local administrator account privileged tokens..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "LocalAccountTokenFilterPolicy" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Write-LogEntry "Filter Local administrator account privileged tokens..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "LocalAccountTokenFilterPolicy" -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Write-LogEntry "Enabling User Account Control approval mode..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "FilterAdministratorToken" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Enabling User Account Control approval mode..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "FilterAdministratorToken" -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Write-LogEntry "Disabling enumerating elevated administator accounts..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI" -Name "EnumerateAdministrators" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Write-LogEntry "Disabling enumerating elevated administator accounts..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI" -Name "EnumerateAdministrators" -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Write-LogEntry "Enable All credential or consent prompting will occur on the interactive user's desktop..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "PromptOnSecureDesktop" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Write-LogEntry "Enable All credential or consent prompting will occur on the interactive user's desktop..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "PromptOnSecureDesktop" -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Write-LogEntry "Enforce cryptographic signatures on any interactive application that requests elevation of privilege..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ValidateAdminCodeSignatures" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Write-LogEntry "Enforce cryptographic signatures on any interactive application that requests elevation of privilege..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ValidateAdminCodeSignatures" -Type DWord -Value 0 -Force -TryLGPO:$true
 
 }
 Else{$stepCounter++}
@@ -2280,21 +2301,29 @@ Else{$stepCounter++}
 
 If ($EnableAppsRunAsAdmin)
 {
-    Show-ProgressStatus -Message "Enabling UAC to allow Apps to run as Administrator" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling UAC to allow Apps to run as Administrator" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name FilterAdministratorToken -Type DWord -Value '1' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'FilterAdministratorToken' -Type DWord -Value '1' -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
 
 If ($DisableUAC)
 {
-    Show-ProgressStatus -Message "Disabling User Access Control" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling User Access Control" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -Type DWord -Value '0' -Force -TryLGPO:$true
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -Type DWord -Value '0' -Forc -TryLGPO:$truee
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name PromptOnSecureDesktop -Type DWord -Value '0' -Force -TryLGPO:$true
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name FilterAdministratorToken -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableLUA' -Type DWord -Value '0' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'ConsentPromptBehaviorAdmin' -Type DWord -Value '0' -Forc -TryLGPO:$truee
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'PromptOnSecureDesktop' -Type DWord -Value '0' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'FilterAdministratorToken' -Type DWord -Value 0 -Force -TryLGPO:$true
+}
+Else{$stepCounter++}
+
+
+If ($DisableAdminShares)
+{
+    Show-ProgressStatus -Message "Disabling implicit administrative shares" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AutoShareWks" -Type DWord -Value 0
 }
 Else{$stepCounter++}
 
@@ -2302,34 +2331,34 @@ Else{$stepCounter++}
 If ($DisableWUP2P -or $OptimizeForVDI)
 {
     If($OptimizeForVDI){$prefixmsg += "VDI Optimizations [OSOT ID:31] :: "}
-    Show-ProgressStatus -Message ("{0}Disable P2P WIndows Updates..." -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("{0}Disable P2P WIndows Updates..." -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    If ([System.Environment]::OSVersion.Version.Build -eq 10240) {
+    If ($OSBuildNumber -eq 10240) {
 		# Method used in 1507
-		Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name DownloadMode -Type DWord -Value '1' -Force
-	} ElseIf ([System.Environment]::OSVersion.Version.Build -le 14393) {
+		Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name 'DownloadMode' -Type DWord -Value '1' -Force
+	} ElseIf ($OSBuildNumber -le 14393) {
 		# Method used in 1511 and 1607
-		Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name DownloadMode -Type DWord -Value '1' -Force -TryLGPO:$true
+		Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name 'DownloadMode' -Type DWord -Value '1' -Force -TryLGPO:$true
 	} Else {
 		# Method used since 1703
-		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name "DODownloadMode" -ErrorAction SilentlyContinue
+		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name 'DODownloadMode' -ErrorAction SilentlyContinue
 	}
     #adds windows update back to control panel (permissions needs to be changed)
-    #Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX' -Name IsConvergedUpdateStackEnabled -Type DWord -Value '0' -Force
+    #Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX' -Name 'IsConvergedUpdateStackEnabled' -Type DWord -Value '0' -Force
 }
 Else{$stepCounter++}
 
 
 If ($EnableIEEnterpriseMode)
 {
-    Show-ProgressStatus -Message "Enabling Enterprise Mode option in IE" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling Enterprise Mode option in IE" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     If(Test-Path $IEEMSiteListPath){
-        Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Enable -Type DWord -Value '1' -Force -TryLGPO:$true
-        Set-SystemSettings -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Sitelist -Value $IEEMSiteListPath -Force -TryLGPO:$true
+        Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Enable -Type DWord -Value '1' -Force -TryLGPO:$true
+        Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main\EnterpriseMode' -Name Sitelist -Value $IEEMSiteListPath -Force -TryLGPO:$true
     }
     Else{
-        Write-LogEntry ("IE Enterprise XML Path [{0}] is not found..." -f $IEEMSiteListPath) -Severity 1 -Outhost
+        Write-LogEntry ("IE Enterprise XML Path [{0}] is not found..." -f $IEEMSiteListPath)
     }
 }
 Else{$stepCounter++}
@@ -2338,7 +2367,7 @@ Else{$stepCounter++}
 # Logon script
 If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
 {
-    Show-ProgressStatus -Message "Copying Logon script to $env:windir\Scripts" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Copying Logon script to $env:windir\Scripts" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
 	If (!(Test-Path "$env:windir\Scripts"))
 	{
@@ -2346,14 +2375,14 @@ If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
 	}
 	Copy-Item -Path $LogonScriptPath -Destination "$env:windir\Scripts\Logon.ps1" -Force | Out-Null
 	
-    Set-SystemSettings -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1" -Force
+    Set-SystemSetting -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1" -Force
 	
     # load default hive
 	Start-Process -FilePath "reg.exe" -ArgumentList "LOAD HKLM:\DEFAULT $env:systemdrive\Users\Default\NTUSER.DAT"
 	
     # create RunOnce entries current / new user(s)
-	Write-LogEntry "Creating RunOnce entries..." -Severity 1 -Outhost
-	Set-SystemSettings -Path "HKLM:\Default\SOFTWARE\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1" -Force
+	Write-LogEntry "Creating RunOnce entries..."
+	Set-SystemSetting -Path "HKLM:\Default\SOFTWARE\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1" -Force
 	
     # unload default hive
 	Start-Process -FilePath "reg.exe" -ArgumentList "UNLOAD HKLM:\DEFAULT"
@@ -2363,50 +2392,63 @@ Else{$stepCounter++}
 
 If($EnableCredGuard)
 {
-    Show-ProgressStatus -Message "Enabling Virtualization Based Security" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling Virtualization Based Security" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     if ($OSBuildNumber -gt 14393) {
         try {
             # For version older than Windows 10 version 1607 (build 14939), enable required Windows Features for Credential Guard
             Enable-WindowsOptionalFeature -FeatureName Microsoft-Hyper-V-HyperVisor -Online -All -LimitAccess -NoRestart -ErrorAction Stop | Out-Null
-            Write-LogEntry "Successfully enabled Microsoft-Hyper-V-HyperVisor feature" -Severity 1 -Outhost
+            Write-LogEntry "Successfully enabled Microsoft-Hyper-V-HyperVisor feature"
         }
         catch [System.Exception] {
-            Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. Error: -f $_") -Severity 3 -Outhost
+            Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. Error: -f $_") -Severity 3
         }
 
         try {
             # For version older than Windows 10 version 1607 (build 14939), add the IsolatedUserMode feature as well
             Enable-WindowsOptionalFeature -FeatureName IsolatedUserMode -Online -All -LimitAccess -NoRestart -ErrorAction Stop | Out-Null
-            Write-LogEntry "Successfully enabled IsolatedUserMode feature" -Severity 1 -Outhost
+            Write-LogEntry "Successfully enabled IsolatedUserMode feature"
         }
         catch [System.Exception] {
-            Write-LogEntry ("An error occured when enabling IsolatedUserMode. Error: -f $_") -Severity 3 -Outhost
+            Write-LogEntry ("An error occured when enabling IsolatedUserMode. Error: -f $_") -Severity 3
         }
     }
     
-    Write-LogEntry "Enabling Virtualization-based protection of code integrity..." -Severity 1 -Outhost
+    Write-LogEntry "Enabling Virtualization-based protection of code integrity..."
     #https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-defender-exploit-guard/enable-virtualization-based-protection-of-code-integrity
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name RequirePlatformSecurityFeatures -Type DWord -Value 1 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name EnableVirtualizationBasedSecurity -Type DWord -Value 1 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name Locked -Type DWord -Value 0 -Force
-    If ([int](Get-WmiObject -Class Win32_OperatingSystem).BuildNumber -lt 14393) {
-        Set-SystemSettings -Path "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name HypervisorEnforcedCodeIntegrity -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name RequirePlatformSecurityFeatures -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name EnableVirtualizationBasedSecurity -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name Locked -Type DWord -Value 0 -Force
+    If ($OSBuildNumber -lt 14393) {
+        Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name HypervisorEnforcedCodeIntegrity -Type DWord -Value 1 -Force
     }
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Enabled -Type DWord -Value 1 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Locked -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Enabled -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Locked -Type DWord -Value 0 -Force
 
-    Write-LogEntry "STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name LsaCfgFlags -Type DWord -Value 1 -Force   
+    Write-LogEntry "STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems..."
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name LsaCfgFlags -Type DWord -Value 1 -Force   
     
     $DeviceGuardProperty = Get-CimInstance –ClassName Win32_DeviceGuard –Namespace root\Microsoft\Windows\DeviceGuard
     If($DeviceGuardProperty.VirtualizationBasedSecurityStatus -eq 1){
-        Write-LogEntry ("Successfully enabled Credential Guard, version: {0}" -f $DeviceGuardProperty.Version) -Severity 1 -Outhost   
+        Write-LogEntry ("Successfully enabled Credential Guard, version: {0}" -f $DeviceGuardProperty.Version)   
     }
     Else{
-        Write-LogEntry "Unable to enabled Credential Guard, may not be supported on this model, trying a differnet way" -Severity 2 -Outhost
+        Write-LogEntry "Unable to enabled Credential Guard, may not be supported on this model, trying a differnet way" -Severity 2
         . $AdditionalScriptsPath\DG_Readiness_Tool_v3.6.ps1 -Enable -CG
     }
+}
+Else{$stepCounter++}
+
+
+If($EnableLinuxSubSystem)
+{
+    Show-ProgressStatus -Message "Enabling Linux Subsystem" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    If ($OSBuildNumber -eq 14393) {
+		# 1607 needs developer mode to be enabled
+		Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Type DWord -Value 1
+		Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowAllTrustedApps" -Type DWord -Value 1
+	}
+    Enable-WindowsOptionalFeature -Online -FeatureName "Microsoft-Windows-Subsystem-Linux" -NoRestart -WarningAction SilentlyContinue | Out-Null
 }
 Else{$stepCounter++}
 
@@ -2415,196 +2457,164 @@ Else{$stepCounter++}
 # ===================================
 If ($OptimizeForVDI)
 {
-    Show-ProgressStatus -Message "Configuring VDI Optimizations" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Configuring VDI Optimizations" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Write-LogEntry ("VDI Optimizations :: Enabling clearing of recent files on exit...") -Severity 1 -Outhost
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "ClearRecentDocsOnExit" -Type DWord -Value 1 -Force
+    Write-LogEntry "VDI Optimizations :: Hiding network options from Lock Screen..."
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "DontDisplayNetworkSelectionUI" -Type DWord -Value 1 -Force -TryLGPO:$true
+
+    Write-LogEntry ("VDI Optimizations :: Enabling clearing of recent files on exit...")
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "ClearRecentDocsOnExit" -Type DWord -Value 1 -Force
     
-    Write-LogEntry ("VDI Optimizations :: Disabling recent files lists...") -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoRecentDocsHistory" -Type DWord -Value 1 -Force
+    Write-LogEntry ("VDI Optimizations :: Disabling recent files lists...")
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoRecentDocsHistory" -Type DWord -Value 1 -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:30] :: Disabling Background Layout Service" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OptimalLayout" -Name EnableAutoLayout -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:30] :: Disabling Background Layout Service"
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OptimalLayout" -Name EnableAutoLayout -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:31] :: Disabling CIFS Change Notifications" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoRemoteRecursiveEvents -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:31] :: Disabling CIFS Change Notifications"
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoRemoteRecursiveEvents -Type DWord -Value 0 -Force
     
-    Write-LogEntry ("VDI Optimizations:: Disabling Storage Sense") -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense" -Name AllowStorageSenseGlobal -Type DWord -Value 0 -Force -TryLGPO:$true
+    Write-LogEntry ("VDI Optimizations:: Disabling Storage Sense")
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense" -Name AllowStorageSenseGlobal -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:32] :: Disabling customer experience improvement program..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:32] :: Disabling customer experience improvement program..."
+	Set-SystemSetting -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:34] :: Enabling Automatically Reboot for the Crash Control" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name AutoReboot -Type DWord -Value 1 -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:34] :: Enabling Automatically Reboot for the Crash Control"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name AutoReboot -Type DWord -Value 1 -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:35] :: Disabling sending alert for the Crash Control..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name SendAlert -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:35] :: Disabling sending alert for the Crash Control..."
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name SendAlert -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:36] :: Disabling writing event to the system log for the Crash Control..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name LogEvent -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:36] :: Disabling writing event to the system log for the Crash Control..."
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name LogEvent -Type DWord -Value 0 -Force
 
     #Optional
-    Write-LogEntry "VDI Optimizations [OSOT ID:37] :: Disable Creation of Crash Dump and removes it..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name CrashDumpEnabled -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:37] :: Disable Creation of Crash Dump and removes it..."
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name CrashDumpEnabled -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:38] :: Disabling IPv6..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisabledComponents' -Type DWord -Value '255' -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:38] :: Disabling IPv6..."
+	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisabledComponents' -Type DWord -Value '255' -Force
     
     #Optional
-    #Write-LogEntry "VDI Optimizations [OSOT ID:39] :: Enabling wait time for disk write or read to take place on the SAN without throwing an error..." -Severity 1 -Outhost
-	#Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'TimeOutValue' -Type DWord -Value '200' -Force
+    #Write-LogEntry "VDI Optimizations [OSOT ID:39] :: Enabling wait time for disk write or read to take place on the SAN without throwing an error..."
+	#Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'TimeOutValue' -Type DWord -Value '200' -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:41] :: Enabling 120 sec wait timeout for a services..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\System\CurrentControlSet\Control' -Name 'ServicesPipeTimeout' -Type DWord -Value '120000' -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:41] :: Enabling 120 sec wait timeout for a services..."
+	Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control' -Name 'ServicesPipeTimeout' -Type DWord -Value '120000' -Force
 
     #Optional
-    Write-LogEntry "VDI Optimizations [OSOT ID:46] :: Removing previous versions capability..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name 'NoPreviousVersionsPage' -Type DWord -Value '1' -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:46] :: Removing previous versions capability..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name 'NoPreviousVersionsPage' -Type DWord -Value '1' -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:52] :: Disabling TCP/IP Task Offload..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\TCPIP\Parameters' -Name 'DisableTaskOffload' -Type DWord -Value '1' -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:52] :: Disabling TCP/IP Task Offload..."
+	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\TCPIP\Parameters' -Name 'DisableTaskOffload' -Type DWord -Value '1' -Force
 
-    #Write-LogEntry "VDI Optimizations [OSOT ID:57] :: Disabling Automatic Update - important for non persistent VMs..." -Severity 1 -Outhost
-	#Set-SystemSettings -Path 'HKLM:\SYSTEM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -Name 'NoAutoUpdate' -Type DWord -Value '1' -Force
+    #Write-LogEntry "VDI Optimizations [OSOT ID:57] :: Disabling Automatic Update - important for non persistent VMs..."
+	#Set-SystemSetting -Path 'HKLM:\SYSTEM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -Name 'NoAutoUpdate' -Type DWord -Value '1' -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:63] :: Disabling NTFS Last Access Timestamp..." -Severity 1 -Outhost
+    Write-LogEntry "VDI Optimizations [OSOT ID:63] :: Disabling NTFS Last Access Timestamp..."
     Start-process fsutil -ArgumentList 'behavior set disablelastaccess 1' -Wait -NoNewWindow
     
-    Write-LogEntry "VDI Optimizations [OSOT ID:287] :: Disabling  Boot Optimize Function..." -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Dfrg\BootOptimizeFunction' -Name 'Enable' -Type String -Value '0' -Force
+    Write-LogEntry "VDI Optimizations [OSOT ID:287] :: Disabling  Boot Optimize Function..."
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Dfrg\BootOptimizeFunction' -Name 'Enable' -Type String -Value '0' -Force
 
-    Write-LogEntry "VDI Optimizations :: Disable Superfetch" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" -Name EnableSuperfetch -Type DWord -Value 0 -Force 
+    Write-LogEntry "VDI Optimizations :: Disable Superfetch"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" -Name EnableSuperfetch -Type DWord -Value 0 -Force 
 
-    Write-LogEntry "VDI Optimizations :: Disabling Paging Executive..." -Severity 1 -Outhost
-    Set-SystemSettings -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'DisablePagingExecutive' -Value 1 -Force
+    Write-LogEntry "VDI Optimizations :: Disabling Paging Executive..."
+    Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'DisablePagingExecutive' -Value 1 -Force
 
-    Write-LogEntry "VDI Optimizations :: Disable Storing Recycle Bin Files" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\policies\Explorer" -Name NoRecycleFiles -Type DWord -Value 1 -Force
+    Write-LogEntry "VDI Optimizations :: Disable Storing Recycle Bin Files"
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\policies\Explorer" -Name NoRecycleFiles -Type DWord -Value 1 -Force
 
-    Write-LogEntry "VDI Optimizations :: Disk Timeout Value" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\services\Disk" -Name TimeOutValue -Type DWord -Value 200 -Force
+    Write-LogEntry "VDI Optimizations :: Disk Timeout Value"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\Disk" -Name TimeOutValue -Type DWord -Value 200 -Force
 
-    Write-LogEntry "VDI Optimizations :: Application Event Log Max Size" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Application" -Name MaxSize -Type DWord -Value 100000 -Force
+    Write-LogEntry "VDI Optimizations :: Application Event Log Max Size"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Application" -Name MaxSize -Type DWord -Value 100000 -Force
 
-    Write-LogEntry "VDI Optimizations :: Application Event Log Retention" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Application" -Name Retention -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations :: Application Event Log Retention"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Application" -Name Retention -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations :: System Event Log Max Size" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\System" -Name MaxSize -Type DWord -Value 100000 -Force
+    Write-LogEntry "VDI Optimizations :: System Event Log Max Size"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\System" -Name MaxSize -Type DWord -Value 100000 -Force
 
-    Write-LogEntry "VDI Optimizations :: System Event Log Retention" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\System" -Name Retention -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations :: System Event Log Retention"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\System" -Name Retention -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations :: Security Event Log Max Size" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Security" -Name MaxSize -Type DWord -Value 100000 -Force
+    Write-LogEntry "VDI Optimizations :: Security Event Log Max Size"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Security" -Name MaxSize -Type DWord -Value 100000 -Force
 
-    Write-LogEntry "VDI Optimizations :: Disabling Security Event Log Retention" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Security" -Name Retention -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations :: Disabling Security Event Log Retention"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Security" -Name Retention -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations :: Disabling Boot GUI" -Severity 1 -Outhost
+    Write-LogEntry "VDI Optimizations :: Disabling Boot GUI"
     Start-process bcdedit -ArgumentList '/set BOOTUX disabled' -Wait -NoNewWindow | Out-Null
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:290] :: Disabling Boot Debugging" -Severity 1 -Outhost
+    Write-LogEntry "VDI Optimizations [OSOT ID:290] :: Disabling Boot Debugging"
     Start-process bcdedit -ArgumentList '/bootdebug off' -Wait -NoNewWindow | Out-Null
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:291] :: Disabling Debugging" -Severity 1 -Outhost
+    Write-LogEntry "VDI Optimizations [OSOT ID:291] :: Disabling Debugging"
     Start-process bcdedit -ArgumentList '/debug off' -Wait -NoNewWindow | Out-Null
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:292] :: Disabling Boot Logging" -Severity 1 -Outhost
+    Write-LogEntry "VDI Optimizations [OSOT ID:292] :: Disabling Boot Logging"
     Start-process bcdedit -ArgumentList '/set bootlog no' -Wait -NoNewWindow | Out-Null
 
-    Write-LogEntry "VDI Optimizations :: Delete Restore Points for System Restore" -Severity 1 -Outhost
+    Write-LogEntry "VDI Optimizations :: Disabling automatic recovery mode during boot"
+    Start-process bcdedit -ArgumentList '/set BootStatusPolicy IgnoreAllFailures' -Wait -NoNewWindow | Out-Null
+
+    Write-LogEntry "VDI Optimizations :: Disabling System Recovery and Factory reset"
+    Start-process reagentc -ArgumentList '/disable'  -Wait -NoNewWindow | Out-Null
+
+    #Write-LogEntry "VDI Optimizations :: Setting Data Execution Prevention (DEP) policy to OptOut"
+    #Start-process bcdedit -ArgumentList '/set nx OptOut'  -Wait -NoNewWindow | Out-Null
+
+    Write-LogEntry "VDI Optimizations :: Delete Restore Points for System Restore"
     Start-process vssadmin -ArgumentList 'delete shadows /All /Quiet' -Wait -NoNewWindow | Out-Null
+    
+    Write-LogEntry "VDI Optimizations :: Disabling Bootup Trace Loggers"
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\AppModel" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\CloudExperienceHostOOBE" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\DiagLog" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\NtfsLog" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\TileStore" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\UBPM" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiDriverIHVSession" -Name Start -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiSession" -Name Start -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations :: Disabling Bootup Trace Loggers" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\AppModel" -Name Start -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\CloudExperienceHostOOBE" -Name Start -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\DiagLog" -Name Start -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\NtfsLog" -Name Start -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\TileStore" -Name Start -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\UBPM" -Name Start -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiDriverIHVSession" -Name Start -Type DWord -Value 0 -Force
-    Set-SystemSettings -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiSession" -Name Start -Type DWord -Value 0 -Force
+    Write-LogEntry "VDI Optimizations :: Configuring LanManWorkstation settings"
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DisableBandwidthThrottling" -Type "DWORD" -Value "1" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileInfoCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DirectoryCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileNotFoundCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
 
-    Write-LogEntry "VDI Optimizations :: Configuring LanManWorkstation settings" -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DisableBandwidthThrottling" -Type "DWORD" -Value "1" -Force
-    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileInfoCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
-    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DirectoryCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
-    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileNotFoundCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
-    Set-SystemSettings -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
-
-
+    Write-LogEntry "VDI Optimizations :: Uninstalling Work Folders Client"
+	Disable-WindowsOptionalFeature -Online -FeatureName "WorkFolders-Client" -NoRestart -WarningAction SilentlyContinue | Out-Null
 
     # NIC Advanced Properties performance settings for network biased environments
     If(Get-NetAdapterAdvancedProperty -IncludeHidden -DisplayName "Send Buffer Size" -ErrorAction SilentlyContinue){
         Set-NetAdapterAdvancedProperty -DisplayName "Send Buffer Size" -DisplayValue 4MB
     }
 
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Optimizing VDI Settings for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
+    Set-UserSetting -Message "VDI Optimizations :: Settings Temporary Internet Files to Non Persistent" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache" -Name Persistent -Value 0 -Type DWord
+    Set-UserSetting -Message "VDI Optimizations [ID 11] :: Disable RSS Feeds" -Path "SOFTWARE\Microsoft\Feeds" -Name SyncStatus -Type DWord -Value 0 -Force
 
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry ("VDI Optimizations :: Settings Temporary Internet Files to Non Persistent for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache" -Name Persistent -Value 0 -Type DWord
-                
-            Write-LogEntry ("VDI Optimizations [ID 11] :: Disable RSS Feeds for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Feeds" -Name SyncStatus -Type DWord -Value 0 -Force
-
-            Write-LogEntry ("VDI Optimizations:: Disabling Storage Sense for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 01 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 02 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 04 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 08 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 32 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 128 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 256 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 512 -Type DWord -Value 0 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 2048 -Type DWord -Value 0 -Force
-
-            Write-LogEntry ("VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackProgs -Type DWord -Value 0 -Force
-
-            Write-LogEntry ("VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackDocs -Type DWord -Value 0 -Force
-            
-            Write-LogEntry ("VDI Optimizations [OSOT ID:203] :: Disabling Microsoft OneDrive startup run for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name OneDrive -Type Binary -Value 0300000064A102EF4C3ED101 -Force
-
-            Write-LogEntry ("VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen for user: {0}" -f $UserID) -Severity 1 -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name NoToastApplicationNotificationOnLockScreen -Type DWord -Value '1' -Force
-
-            Write-LogEntry ("VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
-
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [01]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 01 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [02]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 02 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [04]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 04 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [08]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 08 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [32]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 32 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [128]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 128 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [256]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 256 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [512]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 512 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [2048]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 2048 -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackProgs -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackDocs -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:203] :: Disabling Microsoft OneDrive startup run" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name OneDrive -Type Binary -Value 0300000064A102EF4C3ED101 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen" -Path "SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name 'NoToastApplicationNotificationOnLockScreen' -Type DWord -Value '1' -Force
+    Set-UserSetting -Message "VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
 
 }
 Else{$stepCounter++}
@@ -2614,11 +2624,11 @@ If($DisableActivityHistory)
  {
     # Disable Activity History feed in Task View
     #Note: The checkbox "Let Windows collect my activities from this PC" remains checked even when the function is disabled
+    Show-ProgressStatus -Message "Disabling Disabling Activity History" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-	Write-LogEntry ("Disabling Disabling Activity History...") -Severity 1 -Outhost
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableActivityFeed" -Type DWord -Value 0 -Force -TryLGPO:$true
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "PublishUserActivities" -Type DWord -Value 0 -Force -TryLGPO:$true
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "UploadUserActivities" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableActivityFeed" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "PublishUserActivities" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "UploadUserActivities" -Type DWord -Value 0 -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -2627,191 +2637,131 @@ If($EnableVisualPerformance)
 {
     # thanks to camxct
     #https://github.com/camxct/Win10-Initial-Setup-Script/blob/master/Win10.psm1
-    Show-ProgressStatus -Message "Adjusting visual effects for performance" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost	
+    Show-ProgressStatus -Message "Adjusting visual effects for performance" -Step ($stepCounter++) -MaxStep $script:Maxsteps	
 
-    Write-LogEntry ("Disabling Checkbox selections on folders and files..." -f $prefixmsg) -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
+    Write-LogEntry ("Disabling Checkbox selections on folders and files..." -f $prefixmsg)
+    Set-SystemSetting -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
-    Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:84] :: "}
-    Write-LogEntry ("{0}Disabling Animations in the taskbar Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Animations in the taskbar Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:85] :: "}
-    Write-LogEntry ("{0}Disabling Enable Peek Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
-    Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Enable Peek Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:86] :: "}
-    Write-LogEntry ("{0}Disabling Save taskbar thumbnail previews Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Save taskbar thumbnail previews Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:87] :: "}
-    Write-LogEntry ("{0}Disabling Show translucent selection rectangle Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewAlphaSelect' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Show translucent selection rectangle Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewAlphaSelect' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:88] :: "}
-    Write-LogEntry ("{0}Disabling Show window contents while dragging Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Show window contents while dragging Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:89] :: "}
-    Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:90] :: "}
-    Write-LogEntry ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect..." -f $prefixmsg) -Severity 1 -Outhost
-	Set-SystemSettings -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow' -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Enabling Visual Performance for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden | Out-Null
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            If($OptimizeForVDI){
-                Write-LogEntry ("VDI Optimizations [OSOT ID:72] :: Setting Windows Visual Effects to Optimized for best performance for User: {0}..." -f $UserID) -Outhost
-                Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 2 -Force
-            }
-            Else{
-                Write-LogEntry ("Setting Windows Visual Effects to Optimized for best performance for User: {0}..." -f $UserID) -Outhost
-                Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 3 -Force
-            }
-
-            <# Additional Performance changes
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\Themes" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-            #>
-
-
-            Write-LogEntry ("{0}Disabling Checkbox selections on folders and files for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
-            Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:84] :: "}
-            Write-LogEntry ("{0}Disabling Animations in the taskbar Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:85] :: "}
-            Write-LogEntry ("{0}Disabling Enable Peek Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:86] :: "}
-            Write-LogEntry ("{0}Disabling Save taskbar thumbnail previews Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:87] :: "}
-            Write-LogEntry ("{0}Disabling Show translucent selection rectangle Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewAlphaSelect" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:88] :: "}
-            Write-LogEntry ("{0}Disabling Show window contents while dragging Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:89] :: "}
-            Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing" -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:90] :: "}
-            Write-LogEntry ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Severity 1 -Outhost
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Write-LogEntry ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow' -Name 'DefaultValue' -Type DWord -Value '0' -Force
     
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:73] :: "}
-            Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Type String -Value 0 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:72] :: "}
+    Set-UserSetting -Message ("{0}Setting Windows Visual Effects to Optimized for best performance" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 2 -Force
+    Set-UserSetting -Message ("{0}Disabling Checkbox selections on folders and files" -f $prefixmsg) -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:74] :: "}
-            Write-LogEntry ("{0}Disabling Animations in the taskbar Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAnimations" -Type DWord -Value 0 -Force
+    <# Additional Performance changes
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\Themes" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    #>
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:75] :: "}
-            Write-LogEntry ("{0}Disabling Peek Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\DWM" -Name "EnableAeroPeek" -Type DWord -Value 0 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
+	Set-UserSetting -Message ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax" -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:76] :: "}
-            Write-LogEntry ("{0}Turning off Play animations in windows for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Desktop" -Name "UserPreferencesMask" -Type Binary -Value 9012038010000000 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:84] :: "}
+	Set-UserSetting -Message ("{0}Disabling Animations in the taskbar Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations" -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:77] :: "}
-            Write-LogEntry ("{0}Disabling Save taskbar thumbnail previews Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\DWM" -Name "AlwaysHibernateThumbnails" -Type DWord -Value 0 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:85] :: "}
+    Set-UserSetting -Message ("{0}Disabling Enable Peek Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("{0}Disabling Enable Peek Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:78] :: "}
-            Write-LogEntry ("{0}Disabling Show translucent selection rectangle Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListviewAlphaSelect" -Type DWord -Value 0 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:86] :: "}
+	Set-UserSetting -Message ("{0}Disabling Save taskbar thumbnail previews Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled" -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:79] :: "}
-            Write-LogEntry ("{0}Disabling Show window contents while dragging Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Desktop" -Name "DragFullWindows" -Type String -Value 0 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:87] :: "}
+	Set-UserSetting -Message ("{0}Disabling Show translucent selection rectangle Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewAlphaSelect" -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:80] :: "}
-            Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Desktop" -Name "FontSmoothing" -Type String -Value 0 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:88] :: "}
+	Set-UserSetting -Message ("{0}Disabling Show window contents while dragging Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:81] :: "}
-            Write-LogEntry ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListviewShadow" -Type DWord -Value 0 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:89] :: "}
+	Set-UserSetting -Message ("{0}Disabling Smooth edges of screen fonts Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing" -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-            If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:10] :: "}
-            Write-LogEntry ("{0}Disabling Delaying Show the Reduce Menu for User: {1}..." -f $prefixmsg,$UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Desktop" -Name MenuShowDelay -Type DWord -Value 120 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:90] :: "}
+	Set-UserSetting -Message ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow" -Name 'DefaultValue' -Type DWord -Value '0' -Force
+    
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:73] :: "}
+    Set-UserSetting -Message ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect" -f $prefixmsg) -Path "Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Type String -Value 0 -Force
 
-	        Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Keyboard" -Name "KeyboardDelay" -Type DWord -Value 0 -Force
-	        
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Type DWord -Value 1 -Force
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:74] :: "}
+    Set-UserSetting -Message ("{0}Disabling Animations in the taskbar Visual Effect" -f $prefixmsg)-Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAnimations" -Type DWord -Value 0 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:75] :: "}
+    Set-UserSetting -Message ("{0}Disabling Peek Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\DWM" -Name "EnableAeroPeek" -Type DWord -Value 0 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:76] :: "}
+    Set-UserSetting -Message ("{0}Turning off Play animations in windows" -f $prefixmsg) -Path "Control Panel\Desktop" -Name "UserPreferencesMask" -Type Binary -Value 9012038010000000 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:77] :: "}
+    Set-UserSetting -Message ("{0}Disabling Save taskbar thumbnail previews Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\DWM" -Name "AlwaysHibernateThumbnails" -Type DWord -Value 0 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:78] :: "}
+    Set-UserSetting -Message ("{0}Disabling Show translucent selection rectangle Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListviewAlphaSelect" -Type DWord -Value 0 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:79] :: "}
+    Set-UserSetting -Message ("{0}Disabling Show window contents while dragging Visual Effect" -f $prefixmsg) -Path "Control Panel\Desktop" -Name "DragFullWindows" -Type String -Value 0 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:80] :: "}
+    Set-UserSetting -Message ("{0}Disabling Smooth edges of screen fonts Visual Effect" -f $prefixmsg) -Path "Control Panel\Desktop" -Name "FontSmoothing" -Type String -Value 0 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:81] :: "}
+    Set-UserSetting -Message ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListviewShadow" -Type DWord -Value 0 -Force
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:10] :: "}
+    Write-LogEntry ("{0}Disabling Delaying Show the Reduce Menu for AllUsers" -f $prefixmsg)
+    Set-UserSetting -Message ("{0}Setting Delaying Show the Reduce Menu" -f $prefixmsg) -Path "Control Panel\Desktop" -Name MenuShowDelay -Type DWord -Value 120 -Force
+	Set-UserSetting -Message ("{0}Removing Keyboard Delay the Reduce Menu" -f $prefixmsg)-Path "Control Panel\Keyboard" -Name "KeyboardDelay" -Type DWord -Value 0 -Force
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Type DWord -Value 1 -Force
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Type DWord -Value 0 -Force   
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Type DWord -Value 0 -Force
+
             
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Type DWord -Value 0 -Force
+    Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on local Folders for User: {0}..." -f $UserID)
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbnailCache" -Type DWord -Value 1 -Force
             
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Type DWord -Value 0 -Force
-
-            
-            Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on local Folders for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbnailCache" -Type DWord -Value 1 -Force
-            
-            Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on Network Folders for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbsDBOnNetworkFolders" -Type DWord -Value 1 -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on Network Folders for User: {0}..." -f $UserID)
+    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbsDBOnNetworkFolders" -Type DWord -Value 1 -Force
 
 }
 Else{$stepCounter++}
@@ -2819,53 +2769,27 @@ Else{$stepCounter++}
 
 If($EnableDarkTheme)
 {
-    # thanks to camxct
-    #https://github.com/camxct/Win10-Initial-Setup-Script/blob/master/Win10.psm1
-    Show-ProgressStatus -Message "Enabling Dark Theme" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost		
-    
-    Set-SystemSettings -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Type DWord -Value 0 -Force
+    Show-ProgressStatus -Message "Enabling Dark Theme" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-UserSetting -Message "Enabling Dark Theme" -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Type DWord -Value 0 -Force 
+}
+Else{$stepCounter++}
+
+
+If($EnableTaskbarAutoColor)
+{
+    Show-ProgressStatus -Message "Enabing Taskbar AutoColorization" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-UserSetting -Message "Enabing Taskbar AutoColorization" -Path "Control Panel\Desktop" -name AutoColorization -Type DWord -Value 1
 }
 Else{$stepCounter++}
 
 
 If($EnableNumlockStartup)
 {
-    Show-ProgressStatus -Message "Enabling NumLock after startup" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Enabling Numlock for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
+    Show-ProgressStatus -Message "Enabling NumLock after startup" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry  ("Enabing Num lock for  for User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\Control Panel\Keyboard" -Name InitialKeyboardIndicators -Value 2147483650 -Type DWord -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
-
-	Set-SystemSettings -Path "HKEY_USERS\.DEFAULT\Control Panel\Keyboard" -Name "InitialKeyboardIndicators" -Type DWord -Value 2147483650 -Force
+    #Write-LogEntry  ("Enabing Num lock for Default")
+	#Set-SystemSetting -Path "HKEY_USERS\.DEFAULT\Control Panel\Keyboard" -Name "InitialKeyboardIndicators" -Type DWord -Value 2147483650 -Force
+    Set-UserSetting -Message "Enabing Num lock" -Path "Control Panel\Keyboard" -Name InitialKeyboardIndicators -Value 2147483650 -Type DWord -Force
 
 	Add-Type -AssemblyName System.Windows.Forms
 	If (!([System.Windows.Forms.Control]::IsKeyLocked('NumLock'))) {
@@ -2878,42 +2802,11 @@ Else{$stepCounter++}
 
 If($ShowKnownExtensions)
 {
-    Show-ProgressStatus -Message "Enabling known extensions" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Showing File Extension for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry  ("Showing known file extensions fo User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Type DWord -Value 0 -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
-    
-    #Write-LogEntry "Showing known file extensions for SYSTEM..." -Severity 1 -Outhost
-	#Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Type DWord -Value 0 -Force
+    Show-ProgressStatus -Message "Enabling known extensions" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-UserSetting -Message "Showing known file extensions" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Type DWord -Value 0 -Force
+   
+    #Write-LogEntry "Showing known file extensions for SYSTEM..."
+	#Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Type DWord -Value 0 -Force
 
 }
 Else{$stepCounter++}
@@ -2921,159 +2814,35 @@ Else{$stepCounter++}
 
 If($ShowHiddenFiles)
 {   
-    Show-ProgressStatus -Message "Enabling hidden files" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Showing hidden files for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry  ("Showing hidden files fo User: {0}..." -f $UserID) -Outhost
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Type DWord -Value 1 -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    Show-ProgressStatus -Message "Enabling hidden files" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-UserSetting -Message "Showing hidden files" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
 
 If($ShowThisPCOnDesktop)
 {
-    Show-ProgressStatus -Message "Adding 'This PC' desktop shortcut" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Adding 'This PC' desktop shortcut for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry ("Enabling 'This PC' shortcut on desktop for User: {0}..." -f $UserID) -Outhost
-            #Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" -Value 0 -Type DWord -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" -Type DWord -Value 0 -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    Show-ProgressStatus -Message "Adding 'This PC' desktop shortcut" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-UserSetting -Message "Adding 'This PC' desktop shortcut" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" -Value 0 -Type DWord -Force
+    Set-UserSetting -Message "Adding 'This PC' desktop shortcut" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" -Type DWord -Value 0 -Force
 }
 Else{$stepCounter++}
 
 
 If($ShowUserFolderOnDesktop)
 {
-    Show-ProgressStatus -Message "Adding 'User Folder' desktop shortcut" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Adding 'User Folder' desktop shortcut for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry ("Enabling 'User Folder' shortcut on desktop for User: {0}..." -f $UserID) -Outhost
-            #Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" -Value 0 -Type DWord -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" -Type DWord -Value 0 -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    Show-ProgressStatus -Message "Adding 'User Folder' desktop shortcut" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-UserSetting -Message "Adding 'User Folder' desktop shortcut" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" -Value 0 -Type DWord -Force
+    Set-UserSetting -Message "Adding 'User Folder' desktop shortcut" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" -Type DWord -Value 0 -Force
 }
 Else{$stepCounter++}
 
 
 If($RemoveRecycleBinOnDesktop)
 {
-    Show-ProgressStatus -Message "Removing 'Recycle Bin' desktop shortcut" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    $p = 1
-    # Loop through each profile on the machine
-    Foreach ($UserProfile in $UserProfiles) {
-        Try{
-            $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-            $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-        }
-        Catch{
-            $UserID = $UserProfile.SID
-        }
-        Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Removing 'Recycle Bin' desktop shortcut for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-
-        #loadhive if not mounted
-        If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-            $HiveLoaded = $true
-        }
-
-        If ($HiveLoaded -eq $true) {
-            Write-LogEntry ("Removing 'Recycle Bin' shortcut on desktop for User: {0}..." -f $UserID) -Outhost
-            #Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{645FF040-5081-101B-9F08-00AA002F954E}" -Type DWord -Value 1 -Force
-            Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{645FF040-5081-101B-9F08-00AA002F954E}" -Type DWord -Value 1 -Force
-        }
-
-        #remove any leftove reg process and then remove hive
-        If ($HiveLoaded -eq $true) {
-            [gc]::Collect()
-            Start-Sleep -Seconds 10
-            Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-        }
-        $p++
-    }
+    Show-ProgressStatus -Message "Removing 'Recycle Bin' desktop shortcut" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-UserSetting -Message "Removing 'Recycle Bin' desktop shortcut" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" -Name "{645FF040-5081-101B-9F08-00AA002F954E}" -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Removing 'Recycle Bin' desktop shortcut" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" -Name "{645FF040-5081-101B-9F08-00AA002F954E}" -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
@@ -3099,54 +2868,19 @@ If ($DisableAppSuggestions)
     }
     $i = 1
 
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableWindowsConsumerFeatures" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableWindowsConsumerFeatures" -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Foreach ($key in $AppSuggestions.GetEnumerator()){
         $AdName = $key.Value
-        Write-LogEntry ("Disabling `"{0}`" option [{1}]..." -f $AdName) -Severity 1 -Outhost
+        Write-LogEntry ("Disabling `"{0}`" option [{1}]..." -f $AdName)
 
-        Show-ProgressStatus -Message "Disabling App Suggestions" -SubMessage ("Disabling: `"{2}`" ({0} of {1})" -f $i,$AppSuggestions.count,$AdName) -Step $i -MaxStep $AppSuggestions.count -Outhost
+        Show-ProgressStatus -Message "Disabling App Suggestions" -SubMessage ("Disabling: `"{2}`" ({0} of {1})" -f $i,$AppSuggestions.count,$AdName) -Step $i -MaxStep $AppSuggestions.count
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0
 
-        $p = 1
-        # Loop through each profile on the machine
-        Foreach ($UserProfile in $UserProfiles) {
-            Try{
-                $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-                $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
-            }
-            Catch{
-                $UserID = $UserProfile.SID
-            }
-            Write-Progress -Id 1 -Activity ("User Profile ({0} of {1})" -f $p,$UserProfiles.count) -Status "Disabling App Suggestions for Profile: $UserID" -CurrentOperation ("Loading Hive [{0}]" -f $UserProfile.UserHive) -PercentComplete ($p / $UserProfiles.count * 100)
-
-
-            #loadhive if not mounted
-            If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
-                Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE LOAD HKU\$($UserProfile.SID) $($UserProfile.UserHive)" -Wait -WindowStyle Hidden
-                $HiveLoaded = $true
-            }
-
-            If ($HiveLoaded -eq $true) {
-                Write-LogEntry ("Disabling App Suggestions for User: {0}..." -f $UserID) -Outhost
-                Set-SystemSettings -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0 -Force
-                If ([System.Environment]::OSVersion.Version.Build -ge 17134) {
-                    $key = Get-ItemProperty -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount\*windows.data.placeholdertilecollection\Current"
-		            Set-ItemProperty -Path $key.PSPath -Name "Data" -Type Binary -Value $key.Data[0..15]
-                }
-            }
-
-            #remove any leftove reg process and then remove hive
-            If ($HiveLoaded -eq $true) {
-                [gc]::Collect()
-                Start-Sleep -Seconds 10
-                Start-Process -FilePath "CMD.EXE" -ArgumentList "/C REG.EXE UNLOAD HKU\$($UserProfile.SID)" -Wait -PassThru  -WindowStyle Hidden | Out-Null
-            }
-            $p++
+        Set-UserSetting -Message "Disabling App Suggestion" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0 -Force
+        If ($OSBuildNumber -ge 17134) {
+            Set-UserSetting -Message "Disabling App Suggestion" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount\*windows.data.placeholdertilecollection\Current" -Name "Data" -Type Binary -Value $key.Data[0..15] -Force
         }
-        
-        Start-Sleep -Seconds 10
-        $i++
     }
 
     Stop-Process -Name "ShellExperienceHost" -Force -ErrorAction SilentlyContinue
@@ -3156,18 +2890,22 @@ Else{$stepCounter++}
 
 If($Hide3DObjectsFromExplorer)
 {
-    Show-ProgressStatus -Message "Hiding 3D Objects icon from Explorer namespace" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Hiding 3D Objects icon from Explorer namespace" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\{0DB7E03F-FC29-4DC6-9020-FF41B59E513A}" -Recurse -ErrorAction SilentlyContinue -Force  | Out-Null
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{31C0DD25-9439-4F12-BF41-7FF4EDA38722}\PropertyBag" -Name "ThisPCPolicy" -Type String -Value "Hide" -Force
-    
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{31C0DD25-9439-4F12-BF41-7FF4EDA38722}\PropertyBag" -Name "ThisPCPolicy" -Type String -Value "Hide" -Force
+    Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\{0DB7E03F-FC29-4DC6-9020-FF41B59E513A}" -Recurse -ErrorAction SilentlyContinue
 }
 Else{$stepCounter++}
 
 
 If($DisableEdgeShortcutCreation)
 {
-    Show-ProgressStatus -Message "Disabling Edge shortcut creation" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSettings -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "DisableEdgeDesktopShortcutCreation" -Type DWord -Value 1 -Force
+    Show-ProgressStatus -Message "Disabling Edge shortcut creation" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "DisableEdgeDesktopShortcutCreation" -Type DWord -Value 1 -Force
+    
+    Write-LogEntry "Disabling Edge preload..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main" -Name "AllowPrelaunch" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\TabPreloader" -Name "AllowTabPreloading" -Type DWord -Value 0 -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -3180,15 +2918,15 @@ If($SetSmartScreenFilter)
     'admin' {$value = 2;$label = "to Require Admin approval"}
     default {$value = 1;$label = "to Warning Users"}
     }
-    Show-ProgressStatus -Message "Configuring Smart Screen Filter $label" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Configuring Smart Screen Filter $label" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableSmartScreen" -Type DWord -Value $value -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "ShellSmartScreenLevel" -Type String -Value "Block" -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableSmartScreen" -Type DWord -Value $value -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "ShellSmartScreenLevel" -Type String -Value "Block" -Force -TryLGPO:$true
 
-    Write-LogEntry "Enabling Smart Screen Filter on Edge..." -Severity 1 -Outhost
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverride" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverrideAppRepUnknown" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSettings -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "EnabledV9" -Type DWord -Value $value -Force -TryLGPO:$true
+    Write-LogEntry "Enabling Smart Screen Filter on Edge..."
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverride" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverrideAppRepUnknown" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "EnabledV9" -Type DWord -Value $value -Force -TryLGPO:$true
 }
 Else{$stepCounter++}
 
@@ -3197,23 +2935,23 @@ If ($DisableFirewall)
 {
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:59] :: "}
-    Show-ProgressStatus -Message ("{0}Disabling Windows Firewall on all profiles" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-
+    Show-ProgressStatus -Message ("{0}Disabling Windows Firewall on all profiles" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\StandardProfile" -Name "EnableFirewall" -Type DWord -Value 0 -Force -TryLGPO:$true
+    
     netsh advfirewall set allprofiles state off | Out-Null
     Try{
         Get-Service 'mpssvc' | Set-Service -StartupType Disabled -ErrorAction Stop
     }
     Catch [System.Management.Automation.ActionPreferenceStopException]{
-        Write-LogEntry ("Unable to Disable Windows Firewall: {0}" -f $_) -Severity 3 -Outhost
+        Write-LogEntry ("Unable to Disable Windows Firewall: {0}" -f $_) -Severity 3
     }
-    
 }
 Else{$stepCounter++}
 
 
 If($CleanSampleFolders)
 {
-    Show-ProgressStatus -Message "Cleaning Sample Folders" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Cleaning Sample Folders" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Remove-Item "$env:PUBLIC\Music\Sample Music" -Recurse -ErrorAction SilentlyContinue | Out-Null
     Remove-Item "$env:PUBLIC\Pictures\Sample Pictures" -Recurse -ErrorAction SilentlyContinue | Out-Null
@@ -3225,7 +2963,7 @@ Else{$stepCounter++}
 
 If($DisableIndexing -or $OptimizeForVDI)
 {
-    Show-ProgressStatus -Message "Disable Indexing on $env:SystemDrive" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disable Indexing on $env:SystemDrive" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Disable-Indexing $env:SystemDrive
 }
@@ -3235,7 +2973,7 @@ Else{$stepCounter++}
 If ($DisableRestore -or $OptimizeForVDI)
 {
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:66] :: "}
-    Show-ProgressStatus -Message ("{0}Disabling system restore..." -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message ("{0}Disabling system restore..." -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Disable-ComputerRestore -drive c:\
 }
@@ -3246,7 +2984,7 @@ If ($PreCompileAssemblies -or $OptimizeForVDI)
 {
     #https://www.emc.com/collateral/white-papers/h14854-optimizing-windows-virtual-desktops-deploys.pdf
     #https://blogs.msdn.microsoft.com/dotnet/2012/03/20/improving-launch-performance-for-your-desktop-applications/
-    Show-ProgressStatus -Message "Pre-compile .NET framework assemblies. This can take a while...." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Pre-compile .NET framework assemblies. This can take a while...." -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Start-Process "$env:windir\Microsoft.NET\Framework\v4.0.30319\ngen.exe" -ArgumentList "update /force" -Wait -NoNewWindow
     Start-Process "$env:windir\Microsoft.NET\Framework\v4.0.30319\ngen.exe" -ArgumentList "executequeueditems" -Wait -NoNewWindow
