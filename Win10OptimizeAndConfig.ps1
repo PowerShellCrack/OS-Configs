@@ -30,6 +30,8 @@
             CFG_OptimizeForVDI
             CFG_EnableOfficeOneNote
             CFG_EnableRDP
+            CFG_EnableUEV
+            CFG_EnableAppV
             CFG_DisableOneDrive
             CFG_PreferIPv4OverIPv6
             CFG_RemoveActiveSetupComponents
@@ -93,7 +95,7 @@
     . EXAMPLE
         #Copy this to MDT CustomSettings.ini
         Properties=CFG_DisableScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_EnableFIPS,CFG_DisableAutoRun,
-        CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_OptimizeForVDI,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,
+        CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_OptimizeForVDI,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_EnableUEV,CFG_EnableAppV,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,
         CFG_RemoveActiveSetupComponents,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_DisableNewNetworkDialog,
         CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,
         CFG_EnableRemoteRegistry,CFG_DisableFirewall,CFG_ApplyPrivacyMitigations,CFG_EnableCredGuard,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableWinRM,CFG_EnableAppsRunAsAdmin,
@@ -939,6 +941,8 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$OptimizeForVDI = $false 
 [boolean]$EnableOfficeOneNote = $false
 [boolean]$EnableRDP = $false
+[boolean]$EnableUEV = $false
+[boolean]$EnableAppV = $false
 [boolean]$DisableOneDrive = $false
 [boolean]$PreferIPv4OverIPv6 = $false
 [boolean]$RemoveActiveSetupComponents = $false
@@ -1021,6 +1025,8 @@ If($tsenv){
     If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))} 
     If($tsenv:CFG_EnableOfficeOneNote){[boolean]$EnableOfficeOneNote = [boolean]::Parse($tsenv.Value("CFG_EnableOfficeOneNote"))}
     If($tsenv:CFG_EnableRDP){[boolean]$EnableRDP = [boolean]::Parse($tsenv.Value("CFG_EnableRDP"))}
+    If($tsenv:CFG_EnableUEV){[boolean]$EnableUEV = [boolean]::Parse($tsenv.Value("CFG_EnableUEV"))}
+    If($tsenv:CFG_EnableAppV){[boolean]$EnableAppV = [boolean]::Parse($tsenv.Value("CFG_EnableAppV"))}
     If($tsenv:CFG_DisableOneDrive){[boolean]$DisableOneDrive = [boolean]::Parse($tsenv.Value("CFG_DisableOneDrive"))}
     If($tsenv:CFG_PreferIPv4OverIPv6){[boolean]$PreferIPv4OverIPv6 = [boolean]::Parse($tsenv.Value("CFG_PreferIPv4OverIPv6"))}
     If($tsenv:CFG_RemoveActiveSetupComponents){[boolean]$RemoveActiveSetupComponents = [boolean]::Parse($tsenv.Value("CFG_RemoveActiveSetupComponents"))}
@@ -1371,6 +1377,33 @@ If ($EnableRDP)
 Else{$stepCounter++}
 
 
+
+If ($EnableAPPV)
+{
+    Show-ProgressStatus -Message "Enabling Microsoft App-V" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+	If($OSBuildNumber -ge 14393){
+        Enable-Uev | Out-null
+    }
+    Else{
+        Write-LogEntry ("Application Virtualization client does not exist on Windows [{0}]; install App-V client from MDOP..." -f $OSBuildNumber)
+    }	
+}
+Else{$stepCounter++}
+
+
+If ($EnableUEV)
+{
+    Show-ProgressStatus -Message "Enabling Microsoft UE-V" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    If($OSBuildNumber -ge 14393){
+        Enable-Appv | Out-null
+    }
+    Else{
+        Write-LogEntry ("User Experience Virtualization client does not exist on Windows [{0}]; install UE-V client from MDOP..." -f $OSBuildNumber)
+    }	
+}
+Else{$stepCounter++}
+
+
 If ($DisableOneDrive)
 {
     Show-ProgressStatus -Message "Disabling OneDrive" -Step ($stepCounter++) -MaxStep $script:Maxsteps
@@ -1420,6 +1453,10 @@ If ($DisableOneDrive)
     #remove registry references to onedrive
     Remove-Item -Path "HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Recurse -ErrorAction SilentlyContinue
 	Remove-Item -Path "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Recurse -ErrorAction SilentlyContinue
+
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:203] :: "}
+    Set-UserSetting -Message ("{0}Disabling Microsoft OneDrive startup run..." -f $prefixmsg) -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name OneDrive -Type Binary -Value 0300000064A102EF4C3ED101 -Force
+    
 }
 Else{
     $stepCounter++
@@ -1575,6 +1612,7 @@ If ($DisabledUnusedFeatures)
             "WindowsMediaPlayer"="67:Windows Media Player"
             "WCF-Services45"="69:ASP.Net 4.5 WCF"
             "Xps-Foundation-Xps-Viewer"="70:Xps Foundation"
+            "WorkFolders-Client"="Work folders Client"
         }
     }
     Show-ProgressStatus -Message "Disabling Unused Features" -Step ($stepCounter++) -MaxStep $script:Maxsteps
@@ -2336,10 +2374,13 @@ If ($DisableWUP2P -or $OptimizeForVDI)
     If ($OSBuildNumber -eq 10240) {
 		# Method used in 1507
 		Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name 'DownloadMode' -Type DWord -Value '1' -Force
-	} ElseIf ($OSBuildNumber -le 14393) {
+        Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name 'DownloadModeRestricted' -Type DWord -Value '1' -Force
+	}
+    ElseIf ($OSBuildNumber -le 14393) {
 		# Method used in 1511 and 1607
 		Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name 'DownloadMode' -Type DWord -Value '1' -Force -TryLGPO:$true
-	} Else {
+	}
+    Else {
 		# Method used since 1703
 		Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" -Name 'DODownloadMode' -ErrorAction SilentlyContinue
 	}
@@ -2375,17 +2416,8 @@ If ($InstallLogonScript -and (Test-Path $LogonScriptPath) )
 	}
 	Copy-Item -Path $LogonScriptPath -Destination "$env:windir\Scripts\Logon.ps1" -Force | Out-Null
 	
-    Set-SystemSetting -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1" -Force
-	
-    # load default hive
-	Start-Process -FilePath "reg.exe" -ArgumentList "LOAD HKLM:\DEFAULT $env:systemdrive\Users\Default\NTUSER.DAT"
-	
-    # create RunOnce entries current / new user(s)
-	Write-LogEntry "Creating RunOnce entries..."
-	Set-SystemSetting -Path "HKLM:\Default\SOFTWARE\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1" -Force
-	
-    # unload default hive
-	Start-Process -FilePath "reg.exe" -ArgumentList "UNLOAD HKLM:\DEFAULT"
+    Set-UserSetting -Message "Creating RunOnce entries" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Runonce" -Name "Logon" -Type DWord -Value "Powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $env:windir\Scripts\Logon.ps1" -Force
+
 }
 Else{$stepCounter++}
 
@@ -2573,6 +2605,7 @@ If ($OptimizeForVDI)
     Write-LogEntry "VDI Optimizations :: Delete Restore Points for System Restore"
     Start-process vssadmin -ArgumentList 'delete shadows /All /Quiet' -Wait -NoNewWindow | Out-Null
     
+    <#
     Write-LogEntry "VDI Optimizations :: Disabling Bootup Trace Loggers"
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\AppModel" -Name Start -Type DWord -Value 0 -Force
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\CloudExperienceHostOOBE" -Name Start -Type DWord -Value 0 -Force
@@ -2582,24 +2615,31 @@ If ($OptimizeForVDI)
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\UBPM" -Name Start -Type DWord -Value 0 -Force
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiDriverIHVSession" -Name Start -Type DWord -Value 0 -Force
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiSession" -Name Start -Type DWord -Value 0 -Force
+    #>
 
+    <#
     Write-LogEntry "VDI Optimizations :: Configuring LanManWorkstation settings"
     Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DisableBandwidthThrottling" -Type "DWORD" -Value "1" -Force
     Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileInfoCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
     Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DirectoryCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
     Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileNotFoundCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
     Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
+    #>
 
-    Write-LogEntry "VDI Optimizations :: Uninstalling Work Folders Client"
-	Disable-WindowsOptionalFeature -Online -FeatureName "WorkFolders-Client" -NoRestart -WarningAction SilentlyContinue | Out-Null
-
+    <#
     # NIC Advanced Properties performance settings for network biased environments
     If(Get-NetAdapterAdvancedProperty -IncludeHidden -DisplayName "Send Buffer Size" -ErrorAction SilentlyContinue){
         Set-NetAdapterAdvancedProperty -DisplayName "Send Buffer Size" -DisplayValue 4MB
     }
+    #>
 
     Set-UserSetting -Message "VDI Optimizations :: Settings Temporary Internet Files to Non Persistent" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache" -Name Persistent -Value 0 -Type DWord
-    Set-UserSetting -Message "VDI Optimizations [ID 11] :: Disable RSS Feeds" -Path "SOFTWARE\Microsoft\Feeds" -Name SyncStatus -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT 11] :: Disable RSS Feeds" -Path "SOFTWARE\Microsoft\Feeds" -Name SyncStatus -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackProgs -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackDocs -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen" -Path "SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name 'NoToastApplicationNotificationOnLockScreen' -Type DWord -Value '1' -Force
+    Set-UserSetting -Message "VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
+
 
     Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [01]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 01 -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [02]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 02 -Type DWord -Value 0 -Force
@@ -2610,12 +2650,7 @@ If ($OptimizeForVDI)
     Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [256]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 256 -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [512]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 512 -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [2048]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 2048 -Type DWord -Value 0 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackProgs -Type DWord -Value 0 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackDocs -Type DWord -Value 0 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:203] :: Disabling Microsoft OneDrive startup run" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name OneDrive -Type Binary -Value 0300000064A102EF4C3ED101 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen" -Path "SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name 'NoToastApplicationNotificationOnLockScreen' -Type DWord -Value '1' -Force
-    Set-UserSetting -Message "VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
-
+    
 }
 Else{$stepCounter++}
 
