@@ -1,98 +1,100 @@
 ﻿<#	
-	.NOTES
-	===========================================================================
-	 Originally Created by:   	Anton Romanyuk
-     Added more capibilities:   Richard Tracy
-	 Filename:     	            Win10OptimizeAndConfig.ps1
-     Last Updated:              03/29/2019
-     Thanks to:                 unixuser011,W4RH4WK,TheVDIGuys
-	===========================================================================
-	.DESCRIPTION
+    .SYNOPSIS
+        Applies Windows 10 Optimizations and configurations. Supports VDI optmizations	
+    
+    .DESCRIPTION
 		Applies Windows 10 Optimizations and configurations. Supports VDI optmizations
         Utilizes LGPO.exe to apply group policy item where neceassary.
-        Utilizes MDT/SCCM TaskSequence variables:
-           _SMSTSLogPath
+        Utilizes MDT/SCCM TaskSequence property control
+            Configurable using custom variables in MDT/SCCM
 
-    . PARAM
-        Configurable using custom variables in MDT/SCCM:
-            CFG_DisableConfigScript
-            CFG_UseLGPOForConfigs
-            LGPOPath
-            CFG_SetPowerCFG
-            CFG_PowerCFGFilePath
-            CFG_EnableVerboseMsg
-            CFG_EnablePSLogging
-            CFG_EnableFIPS
-            CFG_DisableAutoRun
-            CFG_CleanSampleFolders
-            CFG_DisableCortana
-            CFG_DisableInternetSearch
-            CFG_OptimizeForVDI
-            CFG_EnableOfficeOneNote
-            CFG_EnableRDP
-            CFG_EnableUEV
-            CFG_EnableAppV
-            CFG_DisableOneDrive
-            CFG_PreferIPv4OverIPv6
-            CFG_RemoveActiveSetupComponents
-            CFG_DisableWindowsFirstLoginAnimation
-            CFG_DisableIEFirstRunWizard
-            CFG_DisableWMPFirstRunWizard
-            CFG_DisableNewNetworkDialog
-            CFG_DisableInternetServices
-            CFG_DisabledUnusedServices
-            CFG_DisabledUnusedFeatures
-            CFG_DisableSchTasks
-            CFG_DisableDefender
-            CFG_DisableFirewall
-            CFG_DisableWireless
-            CFG_DisableBluetooth
-            CFG_EnableRemoteRegistry
-            CFG_DisableFirewall
-            CFG_ApplyPrivacyMitigations
-            CFG_EnableCredGuard
-            CFG_InstallLogonScript
-            CFG_LogonScriptPath
-            CFG_EnableWinRM
-            CFG_EnableAppsRunAsAdmin
-            CFG_DisableUAC
-            CFG_DisableWUP2P
-            CFG_EnableIEEnterpriseMode
-            CFG_IEEMSiteListPath
-            CFG_PreCompileAssemblies
-            CFG_DisableIndexing
-            CFG_EnableSecureLogon
-            CFG_HideDrives
-            CFG_DisableAllNotifications
-            CFG_InstallPSModules
-            CFG_EnableVisualPerformance
-            CFG_EnableDarkTheme
-            CFG_EnableNumlockStartup
-            CFG_ShowKnownExtensions
-            CFG_ShowHiddenFiles
-            CFG_ShowThisPCOnDesktop
-            CFG_ShowUserFolderOnDesktop
-            CFG_RemoveRecycleBinOnDesktop
-            CFG_Hide3DObjectsFromExplorer
-            CFG_DisableEdgeShortcut
-            CFG_SetSmartScreenFilter
-            CFG_EnableStrictUAC
-            CFG_ApplyCustomHost
-            HostPath
-            CFG_DisableStoreOnTaskbar
-            CFG_DisableActionCenter
-            CFG_DisableFeedback
-            CFG_DisableWindowsUpgrades
-            CFG_DisableSmartCardLogon
-            CFG_DisablePreviewBuild
-            CFG_DisableAppSuggestions
-            CFG_DisableActivityHistory
-            CFG_DisableAdminShares
-            CFG_DisableDriverUpdates
-            CFG_EnableLinuxSubSystem
-            CFG_EnableTaskbarAutoColor
+    .PARAM
+        CFG_DisableConfigScript
+        CFG_UseLGPOForConfigs
+        LGPOPath
+        CFG_SetPowerCFG
+        CFG_PowerCFGFilePath
+        CFG_EnableVerboseMsg
+        CFG_EnablePSLogging
+        CFG_EnableFIPS
+        CFG_DisableAutoRun
+        CFG_CleanSampleFolders
+        CFG_DisableCortana
+        CFG_DisableInternetSearch
+        CFG_OptimizeForVDI
+        CFG_EnableOfficeOneNote
+        CFG_EnableRDP
+        CFG_EnableUEV
+        CFG_EnableAppV
+        CFG_DisableOneDrive
+        CFG_PreferIPv4OverIPv6
+        CFG_RemoveActiveSetupComponents
+        CFG_DisableWindowsFirstLoginAnimation
+        CFG_DisableIEFirstRunWizard
+        CFG_DisableWMPFirstRunWizard
+        CFG_DisableNewNetworkDialog
+        CFG_DisableInternetServices
+        CFG_DisabledUnusedServices
+        CFG_DisabledUnusedFeatures
+        CFG_DisableSchTasks
+        CFG_DisableDefender
+        CFG_DisableFirewall
+        CFG_DisableWireless
+        CFG_DisableBluetooth
+        CFG_EnableRemoteRegistry
+        CFG_DisableFirewall
+        CFG_ApplyPrivacyMitigations
+        CFG_EnableCredGuard
+        CFG_InstallLogonScript
+        CFG_LogonScriptPath
+        CFG_EnableWinRM
+        CFG_EnableAppsRunAsAdmin
+        CFG_DisableUAC
+        CFG_DisableWUP2P
+        CFG_EnableIEEnterpriseMode
+        CFG_IEEMSiteListPath
+        CFG_PreCompileAssemblies
+        CFG_DisableIndexing
+        CFG_EnableSecureLogon
+        CFG_HideDrives
+        CFG_DisableAllNotifications
+        CFG_InstallPSModules
+        CFG_EnableVisualPerformance
+        CFG_EnableDarkTheme
+        CFG_EnableNumlockStartup
+        CFG_ShowKnownExtensions
+        CFG_ShowHiddenFiles
+        CFG_ShowThisPCOnDesktop
+        CFG_ShowUserFolderOnDesktop
+        CFG_RemoveRecycleBinOnDesktop
+        CFG_Hide3DObjectsFromExplorer
+        CFG_DisableEdgeShortcut
+        CFG_SetSmartScreenFilter
+        CFG_EnableStrictUAC
+        CFG_ApplyCustomHost
+        HostPath
+        CFG_DisableStoreOnTaskbar
+        CFG_DisableActionCenter
+        CFG_DisableFeedback
+        CFG_DisableWindowsUpgrades
+        CFG_DisableSmartCardLogon
+        CFG_DisablePreviewBuild
+        CFG_DisableAppSuggestions
+        CFG_DisableActivityHistory
+        CFG_DisableAdminShares
+        CFG_DisableDriverUpdates
+        CFG_EnableLinuxSubSystem
+        CFG_EnableTaskbarAutoColor
+        CFG_OptimizeNetwork
     
-    . EXAMPLE
+    .NOTES
+        Author:         Richard Tracy	    
+        Originator:   	Anton Romanyuk
+        Last Update:    04/25/2019
+        Version:        3.1.2
+        Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
+
+    .EXAMPLE
         #Copy this to MDT CustomSettings.ini
         Properties=CFG_DisableScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_EnableFIPS,CFG_DisableAutoRun,
         CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_OptimizeForVDI,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_EnableUEV,CFG_EnableAppV,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,
@@ -103,21 +105,45 @@
         CFG_InstallPSModules,CFG_EnableVisualPerformance,CFG_EnableDarkTheme,CFG_EnableNumlockStartup,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,
         CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,SCCMSiteServer,AppVolMgrServer,AdminMenuConfigPath,CFG_SetSmartScreenFilter,CFG_EnableStrictUAC,
         CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades,CFG_DisableSmartCardLogon,CFG_DisablePreviewBuild,CFG_DisableAppSuggestions,
-        CFG_DisableActivityHistory,CFG_DisableAdminShares,CFG_DisableDriverUpdates,CFG_EnableLinuxSubSystem,CFG_EnableTaskbarAutoColor
+        CFG_DisableActivityHistory,CFG_DisableAdminShares,CFG_DisableDriverUpdates,CFG_EnableLinuxSubSystem,CFG_EnableTaskbarAutoColor,CFG_OptimizeNetwork
 
         Then add each option to a priority specifically for your use, like:
         [Default]
         CFG_UseLGPOForConfigs=True
-        CFG_SetPowerCFG=Custom
-        CFG_PowerCFGFilePath=%DeployRoot%\Scripts\Custom\OS-Configs\AlwaysOnPowerScheme.pow
         CFG_EnableVerboseMsg=True
         CFG_DisableAutoRun=True
         CFG_CleanSampleFolders=True
         ...
 
     .LINKS
-
         https://github.com/TheVDIGuys/W10_1803_VDI_Optimize
+        https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
+
+    .LOGS
+        3.1.2 - Apr 25, 2019 - Updated SYNOPSIS, Add OptimizeNetwork switch
+        3.1.1 - Apr 17, 2019 - added App-V and UE-V control
+        3.1.0 - Apr 17, 2019 - added Set-UserSetting function
+        3.0.4 - Apr 12, 2019 - added more Windwos 10 settings check
+        3.0.1 - Apr 12, 2019 - fixed progress bar for each user, removed extension script check
+        3.0.0 - Apr 4, 2019 -  added progress bar for tasksequence
+        2.5.0 - Mar 29, 2019 - added more options from theVDIGuys script
+        2.1.6 - Mar 13, 2019 - Commented out Windows 10 old items
+        2.1.5 - Mar 13, 2019 - Fixed mitigations script and removed null outputs
+        2.1.3 - Mar 12, 2019 - Fixed TyLGPO Trigger on some keys
+        2.1.0 - Mar 12, 2019 - Updatd LGPO process as global variable and added param for it
+        2.0.0 - Mar 11, 2019 - Split STIGs and EMET mitcations to Seperate script (WIn10STIGAndMitigations.ps1)
+        1.5.0 - Mar 8, 2019  - Add a lot more VDI Optimizations using Vmware OSOT xml, changed Configure-RegistryItem to Set-SystemSettings
+        1.2.4 - Mar 8, 2019  - Fixed relative path for LGPO.exe
+        1.2.7 - Mar 7, 2019  - updated EMET aas hashtables, added SID translation for registry hive loading
+        1.2.5 - Mar 7, 2019  - Cleaned up log comments, Fixed EMET mitigations for windows 10 versions
+        1.2.4 - Mar 7, 2019  - Added EMET mitigations, fixed Write-LogEntry
+        1.2.0 - Mar 7, 2019  - Added new capabilities, VDI Optimizations control, fixed Configure-bluetooth,Configure-RegistryItem function
+        1.1.8 - Dec 14, 2018 - Added User profile registry loop
+        1.1.2 - Dec 14, 2018 - Added more property checks, Merged Configure-LGPO with Configure-RegistryItem functiuon
+        1.1.0 - Dec 13, 2018 - Added Bluetooth Function, LGPO Function, Added STIGs
+
+        1.0.0 - Nov 20, 2018 - initial 
+ 
 #> 
 
 
@@ -1006,6 +1032,7 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$DisableDriverUpdates = $false
 [boolean]$EnableLinuxSubSystem = $false
 [boolean]$EnableTaskbarAutoColor = $false
+[boolean]$OptimizeNetwork = $false
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
@@ -1087,6 +1114,7 @@ If($tsenv){
     If($tsenv:CFG_DisableDriverUpdates){[boolean]$DisableDriverUpdates = [boolean]::Parse($tsenv.Value("CFG_DisableDriverUpdates"))}
     If($tsenv:CFG_EnableLinuxSubSystem){[boolean]$EnableLinuxSubSystem = [boolean]::Parse($tsenv.Value("CFG_EnableLinuxSubSystem"))}
     If($tsenv:CFG_EnableTaskbarAutoColor){[boolean]$EnableTaskbarAutoColor = [boolean]::Parse($tsenv.Value("CFG_EnableTaskbarAutoColor"))}
+    If($tsenv:CFG_OptimizeNetwork){[boolean]$OptimizeNetwork = [boolean]::Parse($tsenv.Value("CFG_OptimizeNetwork"))}
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
@@ -1456,12 +1484,16 @@ If ($DisableOneDrive)
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:203] :: "}
     Set-UserSetting -Message ("{0}Disabling Microsoft OneDrive startup run..." -f $prefixmsg) -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name OneDrive -Type Binary -Value 0300000064A102EF4C3ED101 -Force
-    
+    If ($OSBuildNumber -le 15063)
+    {
+        Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse -ErrorAction SilentlyContinue
+        Remove-Item -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse -ErrorAction SilentlyContinue
+        Set-SystemSetting -Path 'HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0' -Force
+        Set-SystemSetting -Path 'HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}' -Name 'System.IsPinnedToNameSpaceTree' -Value '0' -Force
+    }
 }
 Else{
     $stepCounter++
-    #Write-LogEntry "STIG Rule ID: SV-98853r1_rule :: Allowing OneDrive synchronizing of accounts for DoD organization..."
-    #Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\OneDrive\AllowTenantList' -Name '{ORG GUID}' -Type String -Value '{ORG GUID}' -Force -TryLGPO:$true
 }
 
 
@@ -2491,6 +2523,7 @@ If ($OptimizeForVDI)
 {
     Show-ProgressStatus -Message "Configuring VDI Optimizations" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
+	
     Write-LogEntry "VDI Optimizations :: Hiding network options from Lock Screen..."
 	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "DontDisplayNetworkSelectionUI" -Type DWord -Value 1 -Force -TryLGPO:$true
 
@@ -2501,43 +2534,43 @@ If ($OptimizeForVDI)
     Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoRecentDocsHistory" -Type DWord -Value 1 -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:30] :: Disabling Background Layout Service"
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OptimalLayout" -Name EnableAutoLayout -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OptimalLayout" -Name "EnableAutoLayout" -Type DWord -Value 0 -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:31] :: Disabling CIFS Change Notifications"
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoRemoteRecursiveEvents -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoRemoteRecursiveEvents" -Type DWord -Value 0 -Force
     
     Write-LogEntry ("VDI Optimizations:: Disabling Storage Sense")
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense" -Name AllowStorageSenseGlobal -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense" -Name "AllowStorageSenseGlobal" -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Write-LogEntry "VDI Optimizations [OSOT ID:32] :: Disabling customer experience improvement program..."
 	Set-SystemSetting -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:34] :: Enabling Automatically Reboot for the Crash Control"
-    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name AutoReboot -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "AutoReboot" -Type DWord -Value 1 -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:35] :: Disabling sending alert for the Crash Control..."
-    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name SendAlert -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "SendAlert" -Type DWord -Value 0 -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:36] :: Disabling writing event to the system log for the Crash Control..."
-    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name LogEvent -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "LogEvent" -Type DWord -Value 0 -Force
 
     #Optional
     Write-LogEntry "VDI Optimizations [OSOT ID:37] :: Disable Creation of Crash Dump and removes it..."
-    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name CrashDumpEnabled -Type DWord -Value 0 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "CrashDumpEnabled" -Type DWord -Value 0 -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:38] :: Disabling IPv6..."
-	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisabledComponents' -Type DWord -Value '255' -Force
+	Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" -Name "DisabledComponents" -Type DWord -Value '255' -Force
     
     #Optional
     #Write-LogEntry "VDI Optimizations [OSOT ID:39] :: Enabling wait time for disk write or read to take place on the SAN without throwing an error..."
-	#Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'TimeOutValue' -Type DWord -Value '200' -Force
+	#Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name "TimeOutValue" -Type DWord -Value '200' -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:41] :: Enabling 120 sec wait timeout for a services..."
-	Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control' -Name 'ServicesPipeTimeout' -Type DWord -Value '120000' -Force
+	Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Control" -Name "ServicesPipeTimeout" -Type DWord -Value '120000' -Force
 
     #Optional
     Write-LogEntry "VDI Optimizations [OSOT ID:46] :: Removing previous versions capability..."
-	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name 'NoPreviousVersionsPage' -Type DWord -Value '1' -Force
+	Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "NoPreviousVersionsPage" -Type DWord -Value '1' -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:52] :: Disabling TCP/IP Task Offload..."
 	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\TCPIP\Parameters' -Name 'DisableTaskOffload' -Type DWord -Value '1' -Force
@@ -2552,16 +2585,16 @@ If ($OptimizeForVDI)
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Dfrg\BootOptimizeFunction' -Name 'Enable' -Type String -Value '0' -Force
 
     Write-LogEntry "VDI Optimizations :: Disable Superfetch"
-    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" -Name EnableSuperfetch -Type DWord -Value 0 -Force 
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" -Name "EnableSuperfetch" -Type DWord -Value 0 -Force 
 
     Write-LogEntry "VDI Optimizations :: Disabling Paging Executive..."
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'DisablePagingExecutive' -Value 1 -Force
 
     Write-LogEntry "VDI Optimizations :: Disable Storing Recycle Bin Files"
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\policies\Explorer" -Name NoRecycleFiles -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\policies\Explorer" -Name "NoRecycleFiles" -Type DWord -Value 1 -Force
 
     Write-LogEntry "VDI Optimizations :: Disk Timeout Value"
-    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\Disk" -Name TimeOutValue -Type DWord -Value 200 -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\Disk" -Name "TimeOutValue" -Type DWord -Value 200 -Force
 
     Write-LogEntry "VDI Optimizations :: Application Event Log Max Size"
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Application" -Name MaxSize -Type DWord -Value 100000 -Force
@@ -2617,26 +2650,20 @@ If ($OptimizeForVDI)
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiSession" -Name Start -Type DWord -Value 0 -Force
     #>
 
-    <#
-    Write-LogEntry "VDI Optimizations :: Configuring LanManWorkstation settings"
-    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DisableBandwidthThrottling" -Type "DWORD" -Value "1" -Force
-    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileInfoCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
-    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DirectoryCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
-    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "FileNotFoundCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
-    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters\" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
-    #>
+    
 
-    <#
-    # NIC Advanced Properties performance settings for network biased environments
-    If(Get-NetAdapterAdvancedProperty -IncludeHidden -DisplayName "Send Buffer Size" -ErrorAction SilentlyContinue){
-        Set-NetAdapterAdvancedProperty -DisplayName "Send Buffer Size" -DisplayValue 4MB
-    }
-    #>
+    Write-LogEntry "VDI Optimizations :: Disabling TLS 1.0"
+    Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client' -Name 'Enabled' -Type DWORD -Value '0' -Force
+	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client' -Name 'DisabledByDefault' -Type DWORD -Value '1' -Force
+	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'Enabled' -Type DWORD -Value '0' -Force
+	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'DisabledByDefault' -Type DWORD -Value '1' -Force
 
-    Set-UserSetting -Message "VDI Optimizations :: Settings Temporary Internet Files to Non Persistent" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache" -Name Persistent -Value 0 -Type DWord
-    Set-UserSetting -Message "VDI Optimizations [OSOT 11] :: Disable RSS Feeds" -Path "SOFTWARE\Microsoft\Feeds" -Name SyncStatus -Type DWord -Value 0 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackProgs -Type DWord -Value 0 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name Start_TrackDocs -Type DWord -Value 0 -Force
+    
+    Set-UserSetting -Message "VDI Optimizations :: Change Explorer Default View..." -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "LaunchTo" -Type DWord -Value 1 -Force 
+    Set-UserSetting -Message "VDI Optimizations :: Settings Temporary Internet Files to Non Persistent" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache" -Name "Persistent" -Value 0 -Type DWord -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT 11] :: Disable RSS Feeds" -Path "SOFTWARE\Microsoft\Feeds" -Name "SyncStatus" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackProgs" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackDocs" -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen" -Path "SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name 'NoToastApplicationNotificationOnLockScreen' -Type DWord -Value '1' -Force
     Set-UserSetting -Message "VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
 
@@ -2651,6 +2678,27 @@ If ($OptimizeForVDI)
     Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [512]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 512 -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations:: Disabling Storage Sense [2048]" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" -Name 2048 -Type DWord -Value 0 -Force
     
+}
+Else{$stepCounter++}
+
+
+IF($OptimizeNetwork){
+
+    Write-LogEntry "VDI Optimizations :: Configuring SMB Modifications for performance"
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "DisableBandwidthThrottling" -Type "DWORD" -Value "1" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "FileInfoCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "DirectoryCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "FileNotFoundCacheEntriesMax" -Type "DWORD" -Value "1024" -Force
+    Set-SystemSetting -Path "HKLM:\System\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "DormantFileLimit" -Type "DWORD" -Value "256" -Force
+   
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "DisableLargeMtu" -Type DWORD -Value '0' -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "MaxCmds" -Type DWORD -Value '8000' -Force
+    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "EnableWsd" -Type DWORD -Value '0' -Force
+    
+    # NIC Advanced Properties performance settings for network biased environments
+    If(Get-NetAdapterAdvancedProperty -IncludeHidden -DisplayName "Send Buffer Size" -ErrorAction SilentlyContinue){
+        Set-NetAdapterAdvancedProperty -DisplayName "Send Buffer Size" -DisplayValue 4MB
+    }
 }
 Else{$stepCounter++}
 
