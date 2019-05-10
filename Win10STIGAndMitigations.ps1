@@ -1,26 +1,27 @@
 ﻿<#	
-	.NOTES
-	===========================================================================
-     Author:   Richard Tracy
-	 Filename:     	            Win10STIGAndMitigations.ps1
-     Last Updated:              03/08/2019
-     Thanks to:                 unixuser011,W4RH4WK
-	===========================================================================
-	.DESCRIPTION
+	.SYNOPSIS
         Applies DISA stigs for Windows 10 
-        Utilizes MDT/SCCM TaskSequence variables:
-           _SMSTSLogPath
-
-    . PARAM
-        Configurable using custom variables in MDT/SCCM:
-            DisableSTIGScript
-            CFG_UseLGPOForConfigs
-            LGPOPath
-            CFG_ApplySTIGItems
-            CFG_ApplyEMETMitigations
-            CFG_OptimizeForVDI
     
-    . EXAMPLE
+    .DESCRIPTION
+        Applies DISA stigs for Windows 10 
+        Utilizes LGPO.exe to apply group policy item where neceassary.
+        Utilizes MDT/SCCM TaskSequence property control
+        Configurable using custom variables in MDT/SCCM
+
+    .PARAM
+        DisableSTIGScript
+        CFG_UseLGPOForConfigs
+        LGPOPath
+        CFG_ApplySTIGItems
+        CFG_ApplyEMETMitigations
+        CFG_OptimizeForVDI
+
+    .NOTES
+        Author:         Richard Tracy
+        Last Update:    04/17/2019
+        Version:        2.1.0
+           
+    .EXAMPLE
         #Copy this to MDT CustomSettings.ini
         Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_ApplySTIGItems,CFG_ApplyEMETMitigations,CFG_OptimizeForVDI
 
@@ -30,12 +31,68 @@
         CFG_ApplyEMETMitigations=True
         CFG_OptimizeForVDI=False
 
+    .LOGS
+        2.1.0 - Apr 17, 2019 - added Set-UserSetting function
+        2.0.0 - Apr 12, 2019 - added more Windows 10 settings check
+        1.5.0 - Mar 29, 2019 - added more options from theVDIGuys script
+        1.1.5 - Mar 13, 2019 - Fixed mitigations script and removed null outputs
+        1.1.0 - Mar 12, 2019 - Updatd LGPO process as global variable and added param for it
+        1.0.0 - Nov 20, 2018 - split from config script 
 #> 
 
 
 ##*===========================================================================
 ##* FUNCTIONS
 ##*===========================================================================
+
+
+Function Test-IsISE {
+# try...catch accounts for:
+# Set-StrictMode -Version latest
+    try {    
+        return $psISE -ne $null;
+    }
+    catch {
+        return $false;
+    }
+}
+
+Function Import-SMSTSENV{
+    ## Get the name of this function
+    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+    
+    try{
+        # Create an object to access the task sequence environment
+        $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
+        #test if variables exist
+        $tsenv.GetVariables()  #| % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
+    }
+    catch{
+        If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
+        Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode." -f $prefix)
+        
+        #set variable to null
+        $Script:tsenv = $null
+    }
+    Finally{
+        #set global Logpath
+        if ($tsenv){
+            #grab the progress UI
+            $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
+
+            # Query the environment to get an existing variable
+            # Set a variable for the task sequence log path
+            #$Global:Logpath = $tsenv.Value("LogPath")
+            $Global:Logpath = $tsenv.Value("_SMSTSLogPath")
+
+            # Or, convert all of the variables currently in the environment to PowerShell variables
+            $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+        }
+        Else{
+            $Global:Logpath = $env:TEMP
+        }
+    }
+}
 
 Function Format-ElapsedTime($ts) {
     $elapsedTime = ""
@@ -54,7 +111,6 @@ Function Format-DatePrefix{
 }
 
 Function Write-LogEntry{
-    [CmdletBinding()] 
     param(
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
         [ValidateNotNullOrEmpty()]
@@ -122,6 +178,90 @@ Function Write-LogEntry{
         }
     }
 }
+
+function Show-ProgressStatus
+{
+    <#
+    .SYNOPSIS
+        Shows task sequence secondary progress of a specific step
+    
+    .DESCRIPTION
+        Adds a second progress bar to the existing Task Sequence Progress UI.
+        This progress bar can be updated to allow for a real-time progress of
+        a specific task sequence sub-step.
+        The Step and Max Step parameters are calculated when passed. This allows
+        you to have a "max steps" of 400, and update the step parameter. 100%
+        would be achieved when step is 400 and max step is 400. The percentages
+        are calculated behind the scenes by the Com Object.
+    
+    .PARAMETER Message
+        The message to display the progress
+    .PARAMETER Step
+        Integer indicating current step
+    .PARAMETER MaxStep
+        Integer indicating 100%. A number other than 100 can be used.
+    .INPUTS
+         - Message: String
+         - Step: Long
+         - MaxStep: Long
+    .OUTPUTS
+        None
+    .EXAMPLE
+        Set's "Custom Step 1" at 30 percent complete
+        Show-ProgressStatus -Message "Running Custom Step 1" -Step 100 -MaxStep 300
+    
+    .EXAMPLE
+        Set's "Custom Step 1" at 50 percent complete
+        Show-ProgressStatus -Message "Running Custom Step 1" -Step 150 -MaxStep 300
+    .EXAMPLE
+        Set's "Custom Step 1" at 100 percent complete
+        Show-ProgressStatus -Message "Running Custom Step 1" -Step 300 -MaxStep 300
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string] $Message,
+        [Parameter(Mandatory=$true)]
+        [int]$Step,
+        [Parameter(Mandatory=$true)]
+        [int]$MaxStep,
+        [string]$SubMessage,
+        [int]$IncrementSteps,
+        [switch]$Outhost
+    )
+
+    Begin{
+
+        If($SubMessage){
+            $StatusMessage = ("{0} [{1}]" -f $Message,$SubMessage)
+        }
+        Else{
+            $StatusMessage = $Message
+
+        }
+    }
+    Process
+    {
+        If($Script:tsenv){
+            $Script:TSProgressUi.ShowActionProgress(`
+                $Script:tsenv.Value("_SMSTSOrgName"),`
+                $Script:tsenv.Value("_SMSTSPackageName"),`
+                $Script:tsenv.Value("_SMSTSCustomProgressDialogMessage"),`
+                $Script:tsenv.Value("_SMSTSCurrentActionName"),`
+                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSNextInstructionPointer")),`
+                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSInstructionTableSize")),`
+                $StatusMessage,`
+                $Step,`
+                $Maxstep)
+        }
+        Else{
+            Write-Progress -Activity "$Message ($Step of $Maxstep)" -Status $StatusMessage -PercentComplete (($Step / $Maxstep) * 100) -id 1
+        }
+    }
+    End{
+        Write-LogEntry $Message -Severity 1 -Outhost:$Outhost
+    }
+}
+
 
 Function Config-Bluetooth{
     [CmdletBinding()] 
@@ -550,132 +690,22 @@ Function Set-UserSetting {
     }
 }
 
-Function Import-SMSTSENV{
-    ## Get the name of this function
-    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
-
-    try{
-        # Create an object to access the task sequence environment
-        $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
-        #$tsenv.GetVariables() | % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
-    }
-    catch{
-        Write-Output "${CmdletName} - TS environment not detected. Running in stand-alone mode."
-    }
-    Finally{
-        #set global Logpath
-        if ($tsenv){
-            #grab the progress UI
-            $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
-
-            # Query the environment to get an existing variable
-            # Set a variable for the task sequence log path
-            #$Global:Logpath = $tsenv.Value("LogPath")
-            $Global:Logpath = $tsenv.Value("_SMSTSLogPath")
-
-            # Or, convert all of the variables currently in the environment to PowerShell variables
-            $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
-        }
-        Else{
-            $Global:Logpath = $env:TEMP
-        }
-    }
-}
-
-function Show-ProgressStatus
-{
-    <#
-    .SYNOPSIS
-        Shows task sequence secondary progress of a specific step
-    
-    .DESCRIPTION
-        Adds a second progress bar to the existing Task Sequence Progress UI.
-        This progress bar can be updated to allow for a real-time progress of
-        a specific task sequence sub-step.
-        The Step and Max Step parameters are calculated when passed. This allows
-        you to have a "max steps" of 400, and update the step parameter. 100%
-        would be achieved when step is 400 and max step is 400. The percentages
-        are calculated behind the scenes by the Com Object.
-    
-    .PARAMETER Message
-        The message to display the progress
-    .PARAMETER Step
-        Integer indicating current step
-    .PARAMETER MaxStep
-        Integer indicating 100%. A number other than 100 can be used.
-    .INPUTS
-         - Message: String
-         - Step: Long
-         - MaxStep: Long
-    .OUTPUTS
-        None
-    .EXAMPLE
-        Set's "Custom Step 1" at 30 percent complete
-        Show-ProgressStatus -Message "Running Custom Step 1" -Step 100 -MaxStep 300
-    
-    .EXAMPLE
-        Set's "Custom Step 1" at 50 percent complete
-        Show-ProgressStatus -Message "Running Custom Step 1" -Step 150 -MaxStep 300
-    .EXAMPLE
-        Set's "Custom Step 1" at 100 percent complete
-        Show-ProgressStatus -Message "Running Custom Step 1" -Step 300 -MaxStep 300
-    #>
-    param(
-        [Parameter(Mandatory=$true)]
-        [string] $Message,
-        [Parameter(Mandatory=$true)]
-        [int]$Step,
-        [Parameter(Mandatory=$true)]
-        [int]$MaxStep,
-        [string]$SubMessage,
-        [int]$IncrementSteps,
-        [switch]$Outhost
-    )
-
-    Begin{
-
-        If($SubMessage){
-            $StatusMessage = ("{0} [{1}]" -f $Message,$SubMessage)
-        }
-        Else{
-            $StatusMessage = $Message
-
-        }
-    }
-    Process
-    {
-        If($Script:tsenv){
-            $Script:TSProgressUi.ShowActionProgress(`
-                $Script:tsenv.Value("_SMSTSOrgName"),`
-                $Script:tsenv.Value("_SMSTSPackageName"),`
-                $Script:tsenv.Value("_SMSTSCustomProgressDialogMessage"),`
-                $Script:tsenv.Value("_SMSTSCurrentActionName"),`
-                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSNextInstructionPointer")),`
-                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSInstructionTableSize")),`
-                $StatusMessage,`
-                $Step,`
-                $Maxstep)
-        }
-        Else{
-            Write-Progress -Activity "$Message ($Step of $Maxstep)" -Status $StatusMessage -PercentComplete (($Step / $Maxstep) * 100) -id 1
-        }
-    }
-    End{
-        Write-LogEntry $Message -Severity 1 -Outhost:$Outhost
-    }
-}
-
 
 ##*===========================================================================
 ##* VARIABLES
 ##*===========================================================================
+## Variables: Script Name and Script Paths
 ## Instead fo using $PSScriptRoot variable, use the custom InvocationInfo for ISE runs
 If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostInvocation } Else { $InvocationInfo = $MyInvocation }
-[string]$scriptDirectory = Split-Path $MyInvocation.MyCommand.Path -Parent
-[string]$scriptName = Split-Path $MyInvocation.MyCommand.Path -Leaf
+#Since running script within Powershell ISE doesn't have a $scriptpath...hardcode it
+If(Test-IsISE){$scriptPath = "C:\Development\GitHub\OS-Configs\Win10STIGAndMitigations.ps1"}Else{$scriptPath = $InvocationInfo.MyCommand.Path}
+[string]$scriptDirectory = Split-Path $scriptPath -Parent
+[string]$scriptName = Split-Path $scriptPath -Leaf
 [string]$scriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($scriptName)
+
 [int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
 [string]$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
+
 
 Import-SMSTSENV
 
@@ -713,23 +743,33 @@ Write-Host "Using log file: $LogFilePath"
 ##*===========================================================================
 ##* DEFAULTS: Configurations are hardcoded here (change values if needed)
 ##*===========================================================================
+#// Global Settings
 [boolean]$DisableScript = $false
 [string]$Global:LGPOPath = "$ToolsPath\LGPO\LGPO.exe"
 [boolean]$UseLGPO = $true
-[boolean]$DisableScript =  $false
+
+#// VDI Preference
+[boolean]$OptimizeForVDI = $false
+
+#// STIG Settings
 [boolean]$ApplySTIGItems = $false
 [boolean]$ApplyEMETMitigations = $false
-[boolean]$OptimizeForVDI = $false
+
 
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
+    #// Global Settings
     If($tsenv:CFG_DisableSTIGScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableSTIGScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
+    
+    #// VDI Preference
+    If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))} 
+    
+    #// STIG Settings
     If($tsenv:CFG_ApplySTIGItems){[boolean]$ApplySTIGItems = [boolean]::Parse($tsenv.Value("CFG_ApplySTIGItems"))}
     If($tsenv:CFG_ApplyEMETMitigations){[boolean]$ApplyEMETMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyEMETMitigations"))}
-    If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))} 
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
@@ -749,12 +789,6 @@ If($FindLGPO){
 Else{
     $UseLGPO = $false
 }
-
-# Get Onenote paths
-$OneNotePathx86 = Get-ChildItem "${env:ProgramFiles(x86)}" -Recurse -Filter "ONENOTE.EXE"
-$OneNotePathx64 = Get-ChildItem "$env:ProgramFiles" -Recurse -Filter "ONENOTE.EXE"
-If($OneNotePathx86){$OneNotePath = $OneNotePathx86}
-If($OneNotePathx64){$OneNotePath = $OneNotePathx64}
 
 ##*===========================================================================
 ##* MAIN

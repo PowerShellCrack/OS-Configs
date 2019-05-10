@@ -9,59 +9,28 @@
             Configurable using custom variables in MDT/SCCM
 
     .PARAM
+        '// Global Settings
         CFG_DisableConfigScript
         CFG_UseLGPOForConfigs
         LGPOPath
-        CFG_SetPowerCFG
-        CFG_PowerCFGFilePath
-        CFG_EnableVerboseMsg
-        CFG_EnablePSLogging
-        CFG_EnableFIPS
-        CFG_DisableAutoRun
-        CFG_CleanSampleFolders
+
+        '// VDI Preference
+        CFG_OptimizeForVDI
+        CFG_EnableVisualPerformance
+
+        '// User Preference
+        CFG_InstallLogonScript
+        CFG_LogonScriptPath
+        CFG_EnableDarkTheme
+        CFG_EnableTaskbarAutoColor
+        CFG_DisableFontSmoothing
         CFG_DisableCortana
         CFG_DisableInternetSearch
-        CFG_OptimizeForVDI
         CFG_EnableOfficeOneNote
-        CFG_EnableRDP
-        CFG_EnableUEV
-        CFG_EnableAppV
         CFG_DisableOneDrive
-        CFG_PreferIPv4OverIPv6
-        CFG_RemoveActiveSetupComponents
         CFG_DisableWindowsFirstLoginAnimation
         CFG_DisableIEFirstRunWizard
         CFG_DisableWMPFirstRunWizard
-        CFG_DisableNewNetworkDialog
-        CFG_DisableInternetServices
-        CFG_DisabledUnusedServices
-        CFG_DisabledUnusedFeatures
-        CFG_DisableSchTasks
-        CFG_DisableDefender
-        CFG_DisableFirewall
-        CFG_DisableWireless
-        CFG_DisableBluetooth
-        CFG_EnableRemoteRegistry
-        CFG_DisableFirewall
-        CFG_ApplyPrivacyMitigations
-        CFG_EnableCredGuard
-        CFG_InstallLogonScript
-        CFG_LogonScriptPath
-        CFG_EnableWinRM
-        CFG_EnableAppsRunAsAdmin
-        CFG_DisableUAC
-        CFG_DisableWUP2P
-        CFG_EnableIEEnterpriseMode
-        CFG_IEEMSiteListPath
-        CFG_PreCompileAssemblies
-        CFG_DisableIndexing
-        CFG_EnableSecureLogon
-        CFG_HideDrives
-        CFG_DisableAllNotifications
-        CFG_InstallPSModules
-        CFG_EnableVisualPerformance
-        CFG_EnableDarkTheme
-        CFG_EnableNumlockStartup
         CFG_ShowKnownExtensions
         CFG_ShowHiddenFiles
         CFG_ShowThisPCOnDesktop
@@ -69,43 +38,75 @@
         CFG_RemoveRecycleBinOnDesktop
         CFG_Hide3DObjectsFromExplorer
         CFG_DisableEdgeShortcut
+        CFG_DisableStoreOnTaskbar
+        CFG_DisableActivityHistory
         CFG_SetSmartScreenFilter
-        CFG_EnableStrictUAC
+        CFG_EnableNumlockStartup
+        CFG_DisableAppSuggestions
+
+        '// System Settings
+        CFG_InstallPSModules
+        CFG_SetPowerCFG
+        CFG_PowerCFGFilePath
+        CFG_EnableIEEnterpriseMode
+        CFG_IEEMSiteListPath
         CFG_ApplyCustomHost
         HostPath
-        CFG_DisableStoreOnTaskbar
+        CFG_EnableSecureLogonCAD
+        CFG_DisableAllNotifications
+        CFG_EnableVerboseMsg
+        CFG_DisableAutoRun
+        CFG_PreferIPv4OverIPv6
+        CFG_EnableAppsRunAsAdmin
+        CFG_HideDrives
         CFG_DisableActionCenter
         CFG_DisableFeedback
-        CFG_DisableWindowsUpgrades
-        CFG_DisableSmartCardLogon
+        CFG_DisableWUP2P
         CFG_DisablePreviewBuild
-        CFG_DisableAppSuggestions
-        CFG_DisableActivityHistory
-        CFG_DisableAdminShares
         CFG_DisableDriverUpdates
+        CFG_DisableWindowsUpgrades
+        CFG_ApplyPrivacyMitigations
+        CFG_RemoveRebootOnLockScreen
+
+        '//System Adv Settings
+        CFG_DisableSmartCardLogon
+        CFG_ForceStrictSmartCardLogon
+        CFG_EnableFIPS
+        CFG_EnableCredGuard
+        CFG_DisableUAC
+        CFG_EnableStrictUAC
+        CFG_EnableRDP
+        CFG_EnableWinRM
+        CFG_EnableRemoteRegistry
+        CFG_EnableUEV
+        CFG_EnableAppV
+        CFG_EnablePSLoggingg
         CFG_EnableLinuxSubSystem
-        CFG_EnableTaskbarAutoColor
+        CFG_DisableAdminShares
+        CFG_DisableSchTasks
+        CFG_DisableDefender
+        CFG_DisableFirewall
+        CFG_DisableWireless
+        CFG_DisableBluetooth
+        CFG_DisableNewNetworkDialog
+        CFG_DisableInternetServices
+        CFG_DisabledUnusedServices
+        CFG_DisabledUnusedFeatures
+        CFG_DisableIndexing
+        CFG_RemoveActiveSetupComponents
+        CFG_PreCompileAssemblies
         CFG_OptimizeNetwork
-    
+
     .NOTES
-        Author:         Richard Tracy	    
-        Originator:   	Anton Romanyuk
-        Last Update:    04/25/2019
-        Version:        3.1.2
+        Author:         Richard Tracy
+        Last Update:    05/10/2019
+        Version:        3.1.4
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
-        Properties=CFG_DisableScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableVerboseMsg,CFG_EnableFIPS,CFG_DisableAutoRun,
-        CFG_CleanSampleFolders,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_OptimizeForVDI,CFG_EnableOfficeOneNote,CFG_EnableRDP,CFG_EnableUEV,CFG_EnableAppV,CFG_DisableOneDrive,CFG_PreferIPv4OverIPv6,
-        CFG_RemoveActiveSetupComponents,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_DisableNewNetworkDialog,
-        CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,
-        CFG_EnableRemoteRegistry,CFG_DisableFirewall,CFG_ApplyPrivacyMitigations,CFG_EnableCredGuard,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableWinRM,CFG_EnableAppsRunAsAdmin,
-        CFG_DisableUAC,CFG_DisableWUP2P,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_PreCompileAssemblies,CFG_EnableSecureLogon,CFG_HideDrives,CFG_DisableAllNotifications,
-        CFG_InstallPSModules,CFG_EnableVisualPerformance,CFG_EnableDarkTheme,CFG_EnableNumlockStartup,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,
-        CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,SCCMSiteServer,AppVolMgrServer,AdminMenuConfigPath,CFG_SetSmartScreenFilter,CFG_EnableStrictUAC,
-        CFG_ApplyCustomHost,HostPath,CFG_DisableStoreOnTaskbar,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWindowsUpgrades,CFG_DisableSmartCardLogon,CFG_DisablePreviewBuild,CFG_DisableAppSuggestions,
-        CFG_DisableActivityHistory,CFG_DisableAdminShares,CFG_DisableDriverUpdates,CFG_EnableLinuxSubSystem,CFG_EnableTaskbarAutoColor,CFG_OptimizeNetwork
+
+        Properties=CFG_DisableConfigScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_EnableVisualPerformance,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableDarkTheme,CFG_EnableTaskbarAutoColor,CFG_DisableFontSmoothing,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableOfficeOneNote,CFG_DisableOneDrive,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,CFG_DisableStoreOnTaskbar,CFG_DisableActivityHistory,CFG_SetSmartScreenFilter,CFG_EnableNumlockStartup,CFG_DisableAppSuggestions,,#// System Settings,CFG_InstallPSModules,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_ApplyCustomHost,HostPath,CFG_EnableSecureLogonCAD,CFG_DisableAllNotifications,CFG_EnableVerboseMsg,CFG_DisableAutoRun,CFG_PreferIPv4OverIPv6,CFG_EnableAppsRunAsAdmin,CFG_HideDrives,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWUP2P,CFG_DisablePreviewBuild,CFG_DisableDriverUpdates,CFG_DisableWindowsUpgrades,CFG_ApplyPrivacyMitigations,CFG_RemoveRebootOnLockScreen,CFG_DisableSmartCardLogon,CFG_ForceStrictSmartCardLogon,CFG_EnableFIPS,CFG_EnableCredGuard,CFG_DisableUAC,CFG_EnableStrictUAC,CFG_EnableRDP,CFG_EnableWinRM,CFG_EnableRemoteRegistry,CFG_EnableUEV,CFG_EnableAppV,CFG_EnablePSLoggingg,CFG_EnableLinuxSubSystem,CFG_DisableAdminShares,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableIndexing,CFG_RemoveActiveSetupComponents,CFG_PreCompileAssemblies,CFG_OptimizeNetwork
 
         Then add each option to a priority specifically for your use, like:
         [Default]
@@ -120,6 +121,9 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
+        3.1.4 - May 10, 2019 - added strict smart card login scenario; reorganized controls in categories
+                                fixed PS module import 
+        3.1.3 - May 9, 2019 - added reboot lockscreen and separated fontsmoothing option
         3.1.2 - Apr 25, 2019 - Updated SYNOPSIS, Add OptimizeNetwork switch
         3.1.1 - Apr 17, 2019 - added App-V and UE-V control
         3.1.0 - Apr 17, 2019 - added Set-UserSetting function
@@ -141,7 +145,6 @@
         1.1.8 - Dec 14, 2018 - Added User profile registry loop
         1.1.2 - Dec 14, 2018 - Added more property checks, Merged Configure-LGPO with Configure-RegistryItem functiuon
         1.1.0 - Dec 13, 2018 - Added Bluetooth Function, LGPO Function, Added STIGs
-
         1.0.0 - Nov 20, 2018 - initial 
  
 #> 
@@ -150,6 +153,54 @@
 ##*===========================================================================
 ##* FUNCTIONS
 ##*===========================================================================
+
+Function Test-IsISE {
+# try...catch accounts for:
+# Set-StrictMode -Version latest
+    try {    
+        return $psISE -ne $null;
+    }
+    catch {
+        return $false;
+    }
+}
+
+Function Import-SMSTSENV{
+    ## Get the name of this function
+    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+    
+    try{
+        # Create an object to access the task sequence environment
+        $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
+        #test if variables exist
+        $tsenv.GetVariables()  #| % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
+    }
+    catch{
+        If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
+        Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode." -f $prefix)
+        
+        #set variable to null
+        $Script:tsenv = $null
+    }
+    Finally{
+        #set global Logpath
+        if ($tsenv){
+            #grab the progress UI
+            $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
+
+            # Query the environment to get an existing variable
+            # Set a variable for the task sequence log path
+            #$Global:Logpath = $tsenv.Value("LogPath")
+            $Global:Logpath = $tsenv.Value("_SMSTSLogPath")
+
+            # Or, convert all of the variables currently in the environment to PowerShell variables
+            $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+        }
+        Else{
+            $Global:Logpath = $env:TEMP
+        }
+    }
+}
 
 Function Format-ElapsedTime($ts) {
     $elapsedTime = ""
@@ -168,15 +219,12 @@ Function Format-DatePrefix{
 }
 
 Function Write-LogEntry{
-    [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
         [ValidateNotNullOrEmpty()]
         [string]$Message,
-
         [Parameter(Mandatory=$false,Position=2)]
 		[string]$Source = '',
-
         [parameter(Mandatory=$false)]
         [ValidateSet(0,1,2,3,4)]
         [int16]$Severity,
@@ -186,7 +234,7 @@ Function Write-LogEntry{
         [string]$OutputLogFile = $Global:LogFilePath,
 
         [parameter(Mandatory=$false)]
-        [switch]$Outhost = $Global:OutToHost
+        [switch]$Outhost
     )
     ## Get the name of this function
     [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
@@ -236,6 +284,89 @@ Function Write-LogEntry{
             4       {If($Global:Verbose){Write-Verbose $OutputMsg}}
             default {Write-Host $OutputMsg}
         }
+    }
+}
+
+function Show-ProgressStatus
+{
+    <#
+    .SYNOPSIS
+        Shows task sequence secondary progress of a specific step
+    
+    .DESCRIPTION
+        Adds a second progress bar to the existing Task Sequence Progress UI.
+        This progress bar can be updated to allow for a real-time progress of
+        a specific task sequence sub-step.
+        The Step and Max Step parameters are calculated when passed. This allows
+        you to have a "max steps" of 400, and update the step parameter. 100%
+        would be achieved when step is 400 and max step is 400. The percentages
+        are calculated behind the scenes by the Com Object.
+    
+    .PARAMETER Message
+        The message to display the progress
+    .PARAMETER Step
+        Integer indicating current step
+    .PARAMETER MaxStep
+        Integer indicating 100%. A number other than 100 can be used.
+    .INPUTS
+         - Message: String
+         - Step: Long
+         - MaxStep: Long
+    .OUTPUTS
+        None
+    .EXAMPLE
+        Set's "Custom Step 1" at 30 percent complete
+        Show-ProgressStatus -Message "Running Custom Step 1" -Step 100 -MaxStep 300
+    
+    .EXAMPLE
+        Set's "Custom Step 1" at 50 percent complete
+        Show-ProgressStatus -Message "Running Custom Step 1" -Step 150 -MaxStep 300
+    .EXAMPLE
+        Set's "Custom Step 1" at 100 percent complete
+        Show-ProgressStatus -Message "Running Custom Step 1" -Step 300 -MaxStep 300
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string] $Message,
+        [Parameter(Mandatory=$true)]
+        [int]$Step,
+        [Parameter(Mandatory=$true)]
+        [int]$MaxStep,
+        [string]$SubMessage,
+        [int]$IncrementSteps,
+        [switch]$Outhost
+    )
+
+    Begin{
+
+        If($SubMessage){
+            $StatusMessage = ("{0} [{1}]" -f $Message,$SubMessage)
+        }
+        Else{
+            $StatusMessage = $Message
+
+        }
+    }
+    Process
+    {
+        If($Script:tsenv){
+            $Script:TSProgressUi.ShowActionProgress(`
+                $Script:tsenv.Value("_SMSTSOrgName"),`
+                $Script:tsenv.Value("_SMSTSPackageName"),`
+                $Script:tsenv.Value("_SMSTSCustomProgressDialogMessage"),`
+                $Script:tsenv.Value("_SMSTSCurrentActionName"),`
+                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSNextInstructionPointer")),`
+                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSInstructionTableSize")),`
+                $StatusMessage,`
+                $Step,`
+                $Maxstep)
+        }
+        Else{
+            Write-Progress -Activity "$Message ($Step of $Maxstep)" -Status $StatusMessage -PercentComplete (($Step / $Maxstep) * 100) -id 1
+        }
+    }
+    End{
+        Write-LogEntry $Message -Severity 1 -Outhost:$Outhost
     }
 }
 
@@ -291,6 +422,19 @@ function Disable-Indexing {
     }
 }
 
+Function Convert-ToHexString{
+    [Parameter(Mandatory=$true,Position=0)]
+    Param ([string]$str)
+
+    $bytes=[System.Text.Encoding]::UniCode.GetBytes($str)
+    return ([byte[]]$bytes)
+}
+
+Function Convert-FromHexString{
+    [Parameter(Mandatory=$true,Position=0)]
+    Param ($hex)
+    [System.Text.Encoding]::UniCode.GetString($hex)
+}
 
 Function Set-SystemSetting {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact='Medium')]
@@ -382,7 +526,7 @@ Function Set-SystemSetting {
             'None' {$LGPORegType = 'NONE'}
             'String' {$LGPORegType = 'SZ'}
             'ExpandString' {$LGPORegType = 'EXPAND_SZ'}
-            'Binary' {$LGPORegType = 'BINARY'}
+            'Binary' {$LGPORegType = 'BINARY'; $value = Convert-ToHexString $value}
             'DWord' {$LGPORegType = 'DWORD'}
             'QWord' {$LGPORegType = 'DWORD_BIG_ENDIAN'}
             'MultiString' {$LGPORegType = 'LINK'}
@@ -531,7 +675,7 @@ Function Set-UserSetting {
     Process
     { 
         $RegKeyHive = ($RegPath).Split('\')[0].Replace('Registry::','').Replace(':','')
-        
+
         #check if hive is local machine.
         If($RegKeyHive -match "HKEY_LOCAL_MACHINE|HKLM|HKCR"){
             Write-LogEntry "Registry path is not a user path. Use Set-SystemSetting cmdlet"
@@ -785,136 +929,87 @@ function Set-PowerPlan {
     }
 }
 
-Function Import-SMSTSENV{
-    ## Get the name of this function
-    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
 
-    try{
-        # Create an object to access the task sequence environment
-        $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
-        #$tsenv.GetVariables() | % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
-    }
-    catch{
-        Write-Output "${CmdletName} - TS environment not detected. Running in stand-alone mode."
-    }
-    Finally{
-        #set global Logpath
-        if ($tsenv){
-            #grab the progress UI
-            $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
-
-            # Query the environment to get an existing variable
-            # Set a variable for the task sequence log path
-            #$Global:Logpath = $tsenv.Value("LogPath")
-            $Global:Logpath = $tsenv.Value("_SMSTSLogPath")
-
-            # Or, convert all of the variables currently in the environment to PowerShell variables
-            $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
-        }
-        Else{
-            $Global:Logpath = $env:TEMP
-        }
-    }
-}
-
-function Show-ProgressStatus
+Function Copy-ItemWithProgress
 {
-    <#
-    .SYNOPSIS
-        Shows task sequence secondary progress of a specific step
-    
-    .DESCRIPTION
-        Adds a second progress bar to the existing Task Sequence Progress UI.
-        This progress bar can be updated to allow for a real-time progress of
-        a specific task sequence sub-step.
-        The Step and Max Step parameters are calculated when passed. This allows
-        you to have a "max steps" of 400, and update the step parameter. 100%
-        would be achieved when step is 400 and max step is 400. The percentages
-        are calculated behind the scenes by the Com Object.
-    
-    .PARAMETER Message
-        The message to display the progress
-    .PARAMETER Step
-        Integer indicating current step
-    .PARAMETER MaxStep
-        Integer indicating 100%. A number other than 100 can be used.
-    .INPUTS
-         - Message: String
-         - Step: Long
-         - MaxStep: Long
-    .OUTPUTS
-        None
-    .EXAMPLE
-        Set's "Custom Step 1" at 30 percent complete
-        Show-ProgressStatus -Message "Running Custom Step 1" -Step 100 -MaxStep 300
-    
-    .EXAMPLE
-        Set's "Custom Step 1" at 50 percent complete
-        Show-ProgressStatus -Message "Running Custom Step 1" -Step 150 -MaxStep 300
-    .EXAMPLE
-        Set's "Custom Step 1" at 100 percent complete
-        Show-ProgressStatus -Message "Running Custom Step 1" -Step 300 -MaxStep 300
-    #>
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$Message,
-
-        [Parameter(Mandatory=$true)]
-        [int]$Step,
-
-        [Parameter(Mandatory=$true)]
-        [int]$MaxStep,
-
-        [string]$SubMessage,
-
-        [int]$IncrementSteps,
-
-        [switch]$Outhost
+    [CmdletBinding()]
+    Param
+    (
+    [Parameter(Mandatory=$true,ValueFromPipelineByPropertyName=$true,Position=0)]
+    [string]$Source,
+    [Parameter(Mandatory=$true,Position=1)]
+    [string]$Destination,
+    [Parameter(Mandatory=$false,Position=3)]
+    [switch]$Force
     )
 
     Begin{
+        $Source = $Source
+    
+        #get the entire folder structure
+        $Filelist = Get-Childitem $Source -Recurse
 
-        If($SubMessage){
-            $StatusMessage = ("{0} [{1}]" -f $Message,$SubMessage)
-        }
-        Else{
-            $StatusMessage = $Message
+        #get the count of all the objects
+        $Total = $Filelist.count
 
-        }
+        #establish a counter
+        $Position = 0
     }
-    Process
-    {
-        If($Script:tsenv){
-            $Script:TSProgressUi.ShowActionProgress(`
-                $Script:tsenv.Value("_SMSTSOrgName"),`
-                $Script:tsenv.Value("_SMSTSPackageName"),`
-                $Script:tsenv.Value("_SMSTSCustomProgressDialogMessage"),`
-                $Script:tsenv.Value("_SMSTSCurrentActionName"),`
-                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSNextInstructionPointer")),`
-                [Convert]::ToUInt32($Script:tsenv.Value("_SMSTSInstructionTableSize")),`
-                $StatusMessage,`
-                $Step,`
-                $Maxstep)
-        }
-        Else{
-            Write-Progress -Activity "$Message ($Step of $Maxstep)" -Status $StatusMessage -PercentComplete (($Step / $Maxstep) * 100) -id 1
+    Process{
+        #Stepping through the list of files is quite simple in PowerShell by using a For loop
+        foreach ($File in $Filelist)
+
+        {
+            #On each file, grab only the part that does not include the original source folder using replace
+            $Filename = ($File.Fullname).replace($Source,'')
+        
+            #rebuild the path for the destination:
+            $DestinationFile = ($Destination+$Filename)
+        
+            #get just the folder path
+            $DestinationPath = Split-Path $DestinationFile -Parent
+
+            #show progress
+            Show-ProgressStatus -Message "Copying data from $source to $Destination" -Step (($Position/$total)*100) -MaxStep $total
+
+            #create destination directories
+            If (-not (Test-Path $DestinationPath) ) {
+                New-Item $DestinationPath -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
+            }
+
+            #do copy (enforce)
+            Try{
+                Copy-Item $File.FullName -Destination $DestinationFile -Force:$Force -ErrorAction:$VerbosePreference -Verbose:($PSBoundParameters['Verbose'] -eq $true) | Out-Null
+                Write-Verbose ("Copied file [{0}] to [{1}]" -f $File.FullName,$DestinationFile)
+            }
+            Catch{
+                Write-Host ("Unable to copy file in {0} to {1}; Error: {2}" -f $File.FullName,$DestinationFile ,$_.Exception.Message) -ForegroundColor Red
+                break
+            }
+            #bump up the counter
+            $Position++
         }
     }
     End{
-        Write-LogEntry $Message -Outhost:$Outhost
+        Show-ProgressStatus -Message "Copy completed" -Step $total -MaxStep $total
     }
 }
 
 ##*===========================================================================
 ##* VARIABLES
 ##*===========================================================================
+## Variables: Script Name and Script Paths
 ## Instead fo using $PSScriptRoot variable, use the custom InvocationInfo for ISE runs
 If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostInvocation } Else { $InvocationInfo = $MyInvocation }
-[string]$scriptDirectory = Split-Path $InvocationInfo.MyCommand.Path -Parent
-[string]$scriptName = Split-Path $InvocationInfo.MyCommand.Path -Leaf
+#Since running script within Powershell ISE doesn't have a $scriptpath...hardcode it
+If(Test-IsISE){$scriptPath = "C:\Development\GitHub\OS-Configs\Win10OptimizeAndConfig.ps1"}Else{$scriptPath = $InvocationInfo.MyCommand.Path}
+[string]$scriptDirectory = Split-Path $scriptPath -Parent
+[string]$scriptName = Split-Path $scriptPath -Leaf
 [string]$scriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($scriptName)
+
 [int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
 [string]$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
+
 
 Import-SMSTSENV
 
@@ -952,61 +1047,29 @@ Write-Host "Using log file: $LogFilePath"
 ##*===========================================================================
 ##* DEFAULTS: Configurations are hardcoded here (change values if needed)
 ##*===========================================================================
-[boolean]$DisableScript =  $false
+#// Global Settings
+[boolean]$DisableScript = $false
 [boolean]$UseLGPO = $true
 [string]$Global:LGPOPath = "$ToolsPath\LGPO\LGPO.exe"
-[ValidateSet('Custom','High Performance','Balanced')]$SetPowerCFG = 'Custom'
-[string]$PowerCFGFilePath = "$FilesPath\AlwaysOnPowerScheme.pow"
-[boolean]$EnablePSLogging = $false
-[boolean]$EnableSystemVerboseMsg = $false
-[boolean]$EnableFIPS = $false
-[boolean]$DisableAutoRun = $false
+
+#// VDI Preference
+[boolean]$OptimizeForVDI = $false 
+[boolean]$EnableVisualPerformance = $false
+
+#// User Preference
+[boolean]$InstallLogonScript = $false
+[string]$LogonScriptPath = "$PSscriptRoot\Win10-Logon.ps1"
+[boolean]$EnableDarkTheme = $true
+[boolean]$EnableTaskbarAutoColor = $false
+[boolean]$DisableFontSmoothing = $false
 [boolean]$CleanSampleFolders = $false
 [boolean]$DisableCortana = $false
 [boolean]$DisableInternetSearch = $false 
-[boolean]$OptimizeForVDI = $false 
 [boolean]$EnableOfficeOneNote = $false
-[boolean]$EnableRDP = $false
-[boolean]$EnableUEV = $false
-[boolean]$EnableAppV = $false
 [boolean]$DisableOneDrive = $false
-[boolean]$PreferIPv4OverIPv6 = $false
-[boolean]$RemoveActiveSetupComponents = $false
 [boolean]$DisableWindowsFirstLoginAnimation = $false
 [boolean]$DisableIEFirstRunWizard = $false
 [boolean]$DisableWMPFirstRunWizard = $false
-[boolean]$DisableNewNetworkDialog = $false
-[boolean]$DisableInternetServices = $false
-[boolean]$DisabledUnusedServices = $false
-[boolean]$DisabledUnusedFeatures = $false
-[boolean]$DisableSchTasks = $false
-[boolean]$DisableDefender = $false
-[boolean]$DisableFirewall = $false
-[boolean]$DisableWireless = $false
-[boolean]$DisableBluetooth = $false
-[boolean]$EnableRemoteRegistry = $false
-[boolean]$DisableFirewall = $false
-[boolean]$ApplyPrivacyMitigations = $false
-[boolean]$EnableCredGuard = $false
-[boolean]$InstallLogonScript = $false
-[string]$LogonScriptPath = "$PSscriptRoot\Win10-Logon.ps1"
-[boolean]$EnableWinRM = $false
-[boolean]$EnableAppsRunAsAdmin = $false
-[boolean]$DisableUAC = $false
-[boolean]$DisableWUP2P = $false
-[boolean]$DisableCortana = $false
-[boolean]$EnableIEEnterpriseMode = $false
-[string]$IEEMSiteListPath = ''
-[boolean]$PreCompileAssemblies = $false
-[boolean]$DisableIndexing = $false
-[boolean]$EnableSecureLogonCtrlAltDelete = $false
-[boolean]$HideDrivesWithNoMedia = $false
-[boolean]$DisableAllNotifications = $false
-[boolean]$InstallPSModules = $false
-[psobject]$InstallModulesPath = Get-ChildItem $ModulesPath -Filter *.psm1 -Recurse
-[boolean]$EnableVisualPerformance = $false
-[boolean]$EnableDarkTheme = $true
-[boolean]$EnableNumlockStartup = $false
 [boolean]$ShowKnownExtensions = $false
 [boolean]$ShowHiddenFiles = $false
 [boolean]$ShowThisPCOnDesktop = $false
@@ -1014,83 +1077,92 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$RemoveRecycleBinOnDesktop = $false
 [boolean]$Hide3DObjectsFromExplorer = $false
 [boolean]$DisableEdgeShortcutCreation = $false
-[ValidateSet('Off','User','Admin')]
-[string]$SetSmartScreenFilter = 'Admin'
-[boolean]$EnableStrictUAC = $false
+[boolean]$DisableStoreOnTaskbar = $false
+[boolean]$DisableActivityHistory = $false
+[string]$SetSmartScreenFilter = 'User' # Set to 'Off','User','Admin'
+[boolean]$EnableNumlockStartup = $false
+[boolean]$DisableAppSuggestions = $false
+
+#// System Settings
+[boolean]$InstallPSModules = $false
+[psobject]$InstallModules = Get-ChildItem $ModulesPath -Filter *.psm1 -Recurse
+[string]$SetPowerCFG = 'Custom' # Set 'Custom','High Performance','Balanced'
+[string]$PowerCFGFilePath = "$FilesPath\AlwaysOnPowerScheme.pow"
+[boolean]$EnableIEEnterpriseMode = $false
+[string]$IEEMSiteListPath = ''
 [boolean]$ApplyCustomHost = $false
 [string]$HostPath = "$FilesPath\WindowsTelemetryhosts"
-[string[]]$UnpinTaskbarApps = "Microsoft Edge","Microsoft Store"
-[boolean]$DisableStoreOnTaskbar = $false
+[boolean]$EnableSecureLogonCAD = $false
+[boolean]$DisableAllNotifications = $false
+[boolean]$EnableVerboseStatusMsg = $false
+[boolean]$DisableAutoRun = $false
+[boolean]$PreferIPv4OverIPv6 = $false
+[boolean]$EnableAppsRunAsAdmin = $false
+[boolean]$HideDrivesWithNoMedia = $false
 [boolean]$DisableActionCenter = $false
 [boolean]$DisableFeedback = $false
-[boolean]$DisableWindowsUpgrades = $false
-[boolean]$DisableSmartCardLogon = $false
+[boolean]$DisableWUP2P = $false
 [boolean]$DisablePreviewBuild = $false
-[boolean]$DisableAppSuggestions = $false
-[boolean]$DisableActivityHistory = $false
-[boolean]$DisableAdminShares = $false
 [boolean]$DisableDriverUpdates = $false
+[boolean]$DisableWindowsUpgrades = $false
+[boolean]$ApplyPrivacyMitigations = $false
+[boolean]$RemoveRebootOnLockScreen = $false
+
+#//System Adv Settings
+[boolean]$DisableSmartCardLogon = $false
+[boolean]$ForceStrictSmartCardLogon = $false
+[boolean]$EnableFIPS = $false
+[boolean]$EnableCredGuard = $false
+[boolean]$DisableUAC = $false
+[boolean]$EnableStrictUAC = $false
+[boolean]$EnableRDP = $false
+[boolean]$EnableWinRM = $false
+[boolean]$EnableRemoteRegistry = $false
+[boolean]$EnableUEV = $false
+[boolean]$EnableAppV = $false
+[boolean]$EnablePSLogging = $false
 [boolean]$EnableLinuxSubSystem = $false
-[boolean]$EnableTaskbarAutoColor = $false
+[boolean]$DisableAdminShares = $false
+[boolean]$DisableSchTasks = $false
+[boolean]$DisableDefender = $false
+[boolean]$DisableFirewall = $false
+[boolean]$DisableWireless = $false
+[boolean]$DisableBluetooth = $false
+[boolean]$DisableNewNetworkDialog = $false
+[boolean]$DisableInternetServices = $false
+[boolean]$DisabledUnusedServices = $false
+[boolean]$DisabledUnusedFeatures = $false
+[boolean]$DisableIndexing = $false
+[boolean]$RemoveActiveSetupComponents = $false
+[boolean]$PreCompileAssemblies = $false
 [boolean]$OptimizeNetwork = $false
 
+
+# Configurations comes from Tasksequence
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
-    # Configurations comes from Tasksequence
+    # Global Settings
     If($tsenv:CFG_DisableConfigScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableConfigScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
-    If($tsenv:CFG_SetPowerCFG){[string]$SetPowerCFG = $tsenv.Value("CFG_SetPowerCFG")}
-    If($tsenv:CFG_PowerCFGFilePath){[string]$PowerCFGFilePath = $tsenv.Value("CFG_PowerCFGFilePath")}
-    If($tsenv:CFG_EnablePSLoggingg){[boolean]$EnablePSLogging = [boolean]::Parse($tsenv.Value("CFG_EnablePSLogging"))}
-    If($tsenv:CFG_EnableVerboseMsg){[boolean]$EnableVerboseMsg = [boolean]::Parse($tsenv.Value("CFG_EnableVerboseMsg"))}
-    If($tsenv:CFG_EnableFIPS){[boolean]$EnableFIPS = [boolean]::Parse($tsenv.Value("CFG_EnableFIPS"))}
-    If($tsenv:CFG_DisableAutoRun){[boolean]$DisableAutoRun = [boolean]::Parse($tsenv.Value("CFG_DisableAutorun"))}
-    If($tsenv:CFG_CleanSampleFolders){[boolean]$CleanSampleFolders = [boolean]::Parse($tsenv.Value("CFG_CleanSampleFolders"))}
+
+    #// VDI Preference
+    If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))} 
+    If($tsenv:CFG_EnableVisualPerformance){[boolean]$EnableVisualPerformance = [boolean]::Parse($tsenv.Value("CFG_EnableVisualPerformance"))}
+
+    #// User Preference
+    If($tsenv:CFG_InstallLogonScript){[boolean]$InstallLogonScript = [boolean]::Parse($tsenv.Value("CFG_InstallLogonScript"))}
+    If($tsenv:CFG_LogonScriptPath){[string]$LogonScriptPath = $tsenv.Value("CFG_LogonScriptPath")}
+    If($tsenv:CFG_EnableDarkTheme){[boolean]$EnableDarkTheme = [boolean]::Parse($tsenv.Value("CFG_EnableDarkTheme"))}
+    If($tsenv:CFG_EnableTaskbarAutoColor){[boolean]$EnableTaskbarAutoColor = [boolean]::Parse($tsenv.Value("CFG_EnableTaskbarAutoColor"))}
+    If($tsenv:CFG_DisableFontSmoothing){[boolean]$DisableFontSmoothing = [boolean]::Parse($tsenv.Value("CFG_DisableFontSmoothing"))}
     If($tsenv:CFG_DisableCortana){[boolean]$DisableCortana = [boolean]::Parse($tsenv.Value("CFG_DisableCortana"))}
     If($tsenv:CFG_DisableInternetSearch){[boolean]$DisableInternetSearch = [boolean]::Parse($tsenv.Value("CFG_DisableInternetSearch"))} 
-    If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))} 
     If($tsenv:CFG_EnableOfficeOneNote){[boolean]$EnableOfficeOneNote = [boolean]::Parse($tsenv.Value("CFG_EnableOfficeOneNote"))}
-    If($tsenv:CFG_EnableRDP){[boolean]$EnableRDP = [boolean]::Parse($tsenv.Value("CFG_EnableRDP"))}
-    If($tsenv:CFG_EnableUEV){[boolean]$EnableUEV = [boolean]::Parse($tsenv.Value("CFG_EnableUEV"))}
-    If($tsenv:CFG_EnableAppV){[boolean]$EnableAppV = [boolean]::Parse($tsenv.Value("CFG_EnableAppV"))}
     If($tsenv:CFG_DisableOneDrive){[boolean]$DisableOneDrive = [boolean]::Parse($tsenv.Value("CFG_DisableOneDrive"))}
-    If($tsenv:CFG_PreferIPv4OverIPv6){[boolean]$PreferIPv4OverIPv6 = [boolean]::Parse($tsenv.Value("CFG_PreferIPv4OverIPv6"))}
-    If($tsenv:CFG_RemoveActiveSetupComponents){[boolean]$RemoveActiveSetupComponents = [boolean]::Parse($tsenv.Value("CFG_RemoveActiveSetupComponents"))}
     If($tsenv:CFG_DisableWindowsFirstLoginAnimation){[boolean]$DisableWindowsFirstLoginAnimation = [boolean]::Parse($tsenv.Value("CFG_DisableWindowsFirstLoginAnimation"))}
     If($tsenv:CFG_DisableIEFirstRunWizard){[boolean]$DisableIEFirstRunWizard = [boolean]::Parse($tsenv.Value("CFG_DisableIEFirstRunWizard"))}
     If($tsenv:CFG_DisableWMPFirstRunWizard){[boolean]$DisableWMPFirstRunWizard = [boolean]::Parse($tsenv.Value("CFG_DisableWMPFirstRunWizard"))}
-    If($tsenv:CFG_DisableNewNetworkDialog){[boolean]$DisableNewNetworkDialog = [boolean]::Parse($tsenv.Value("CFG_DisableNewNetworkDialog"))}
-    If($tsenv:CFG_DisableInternetServices){[boolean]$DisableInternetServices = [boolean]::Parse($tsenv.Value("CFG_DisableInternetServices"))}
-    If($tsenv:CFG_DisabledUnusedServices){[boolean]$DisabledUnusedServices = [boolean]::Parse($tsenv.Value("CFG_DisabledUnusedServices"))}
-    If($tsenv:CFG_DisabledUnusedFeatures){[boolean]$DisabledUnusedFeatures = [boolean]::Parse($tsenv.Value("CFG_DisabledUnusedFeatures"))}
-    If($tsenv:CFG_DisableSchTasks){[boolean]$DisableSchTasks = [boolean]::Parse($tsenv.Value("CFG_DisableSchTasks"))}
-    If($tsenv:CFG_DisableDefender){[boolean]$DisableDefender = [boolean]::Parse($tsenv.Value("CFG_DisableDefender"))}
-    If($tsenv:CFG_DisableFirewall){[boolean]$DisableFirewall = [boolean]::Parse($tsenv.Value("CFG_DisableFirewall"))}
-    If($tsenv:CFG_DisableWireless){[boolean]$DisableWireless = [boolean]::Parse($tsenv.Value("CFG_DisableWireless"))}
-    If($tsenv:CFG_DisableBluetooth){[boolean]$DisableBluetooth = [boolean]::Parse($tsenv.Value("CFG_DisableBluetooth"))}
-    If($tsenv:CFG_EnableRemoteRegistry){[boolean]$EnableRemoteRegistry = [boolean]::Parse($tsenv.Value("CFG_EnableRemoteRegistry"))}
-    If($tsenv:CFG_DisableFirewall){[boolean]$DisableFirewall = [boolean]::Parse($tsenv.Value("CFG_DisableFirewall"))}
-    If($tsenv:CFG_ApplyPrivacyMitigations){[boolean]$ApplyPrivacyMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyPrivacyMitigations"))}
-    If($tsenv:CFG_EnableCredGuard){[boolean]$EnableCredGuard = [boolean]::Parse($tsenv.Value("CFG_EnableCredGuard"))}
-    If($tsenv:CFG_InstallLogonScript){[boolean]$InstallLogonScript = [boolean]::Parse($tsenv.Value("CFG_InstallLogonScript"))}
-    If($tsenv:CFG_LogonScriptPath){[string]$LogonScriptPath = $tsenv.Value("CFG_LogonScriptPath")}
-    If($tsenv:CFG_EnableWinRM){[boolean]$EnableWinRM = [boolean]::Parse($tsenv.Value("CFG_EnableWinRM"))}
-    If($tsenv:CFG_EnableAppsRunAsAdmin){[boolean]$EnableAppsRunAsAdmin = [boolean]::Parse($tsenv.Value("CFG_EnableAppsRunAsAdmin"))}
-    If($tsenv:CFG_DisableUAC){[boolean]$DisableUAC = [boolean]::Parse($tsenv.Value("CFG_DisableUAC"))}
-    If($tsenv:CFG_EnableStrictUAC){[boolean]$EnableStrictUAC = [boolean]::Parse($tsenv.Value("CFG_EnableStrictUAC"))}
-    If($tsenv:CFG_DisableWUP2P){[boolean]$DisableWUP2P = [boolean]::Parse($tsenv.Value("CFG_DisableWUP2P"))}
-    If($tsenv:CFG_EnableIEEnterpriseMode){[boolean]$EnableIEEnterpriseMode = [boolean]::Parse($tsenv.Value("CFG_EnableIEEnterpriseMode"))}
-    If($tsenv:CFG_IEEMSiteListPath){[string]$IEEMSiteListPath = $tsenv.Value("CFG_IEEMSiteListPath")}
-    If($tsenv:CFG_PreCompileAssemblies){[boolean]$PreCompileAssemblies = [boolean]::Parse($tsenv.Value("CFG_PreCompileAssemblies"))}
-    If($tsenv:CFG_DisableIndexing){[boolean]$DisableIndexing = [boolean]::Parse($tsenv.Value("CFG_DisableIndexing"))}
-    If($tsenv:CFG_EnableSecureLogon){[boolean]$EnableSecureLogonCtrlAltDelete = [boolean]::Parse($tsenv.Value("CFG_EnableSecureLogon"))}
-    If($tsenv:CFG_HideDrives){[boolean]$HideDrivesWithNoMedia = [boolean]::Parse($tsenv.Value("CFG_HideDrives"))}
-    If($tsenv:CFG_DisableAllNotifications){[boolean]$DisableAllNotifications = [boolean]::Parse($tsenv.Value("CFG_DisableAllNotifications"))}
-    If($tsenv:CFG_InstallPSModules){[boolean]$InstallPSModules = [boolean]::Parse($tsenv.Value("CFG_InstallPSModules"))}
-    If($tsenv:CFG_EnableVisualPerformance){[boolean]$EnableVisualPerformance = [boolean]::Parse($tsenv.Value("CFG_EnableVisualPerformance"))}
-    If($tsenv:CFG_EnableDarkTheme){[boolean]$EnableDarkTheme = [boolean]::Parse($tsenv.Value("CFG_EnableDarkTheme"))}
-    If($tsenv:CFG_EnableNumlockStartup){[boolean]$EnableNumlockStartup = [boolean]::Parse($tsenv.Value("CFG_EnableNumlockStartup"))}
     If($tsenv:CFG_ShowKnownExtensions){[boolean]$ShowKnownExtensions = [boolean]::Parse($tsenv.Value("CFG_ShowKnownExtensions"))}
     If($tsenv:CFG_ShowHiddenFiles){[boolean]$ShowHiddenFiles = [boolean]::Parse($tsenv.Value("CFG_ShowHiddenFiles"))}
     If($tsenv:CFG_ShowThisPCOnDesktop){[boolean]$ShowThisPCOnDesktop = [boolean]::Parse($tsenv.Value("CFG_ShowThisPCOnDesktop"))}
@@ -1098,22 +1170,63 @@ If($tsenv){
     If($tsenv:CFG_RemoveRecycleBinOnDesktop){[boolean]$RemoveRecycleBinOnDesktop = [boolean]::Parse($tsenv.Value("CFG_RemoveRecycleBinOnDesktop"))}
     If($tsenv:CFG_Hide3DObjectsFromExplorer){[boolean]$Hide3DObjectsFromExplorer = [boolean]::Parse($tsenv.Value("CFG_Hide3DObjectsFromExplorer"))}
     If($tsenv:CFG_DisableEdgeShortcut){[boolean]$DisableEdgeShortcutCreation = [boolean]::Parse($tsenv.Value("CFG_DisableEdgeShortcut"))}
-    If($tsenv:CFG_UnpinTaskbarApps){[string[]]$UnpinTaskbarApps = $tsenv.Value("CFG_UnpinTaskbarApps")}
+    If($tsenv:CFG_DisableStoreOnTaskbar){[boolean]$DisableStoreOnTaskbar = [boolean]::Parse($tsenv.Value("CFG_DisableStoreOnTaskbar"))}
+    If($tsenv:CFG_DisableActivityHistory){[boolean]$DisableActivityHistory = [boolean]::Parse($tsenv.Value("CFG_DisableActivityHistory"))}
     If($tsenv:CFG_SetSmartScreenFilter){[string]$SetSmartScreenFilter = $tsenv.Value("CFG_SetSmartScreenFilter")}
+    If($tsenv:CFG_EnableNumlockStartup){[boolean]$EnableNumlockStartup = [boolean]::Parse($tsenv.Value("CFG_EnableNumlockStartup"))}
+    If($tsenv:CFG_DisableAppSuggestions){[boolean]$DisableAppSuggestions = [boolean]::Parse($tsenv.Value("CFG_DisableAppSuggestions"))}
+
+    #// System Settings
+    If($tsenv:CFG_InstallPSModules){[boolean]$InstallPSModules = [boolean]::Parse($tsenv.Value("CFG_InstallPSModules"))}
+    If($tsenv:CFG_SetPowerCFG){[string]$SetPowerCFG = $tsenv.Value("CFG_SetPowerCFG")}
+    If($tsenv:CFG_PowerCFGFilePath){[string]$PowerCFGFilePath = $tsenv.Value("CFG_PowerCFGFilePath")}
+    If($tsenv:CFG_EnableIEEnterpriseMode){[boolean]$EnableIEEnterpriseMode = [boolean]::Parse($tsenv.Value("CFG_EnableIEEnterpriseMode"))}
+    If($tsenv:CFG_IEEMSiteListPath){[string]$IEEMSiteListPath = $tsenv.Value("CFG_IEEMSiteListPath")}
     If($tsenv:CFG_ApplyCustomHost){[boolean]$ApplyCustomHost = [boolean]::Parse($tsenv.Value("CFG_ApplyCustomHost"))}
     If($tsenv:HostPath){[string]$HostPath = $tsenv.Value("HostPath")}
-    If($tsenv:CFG_DisableStoreOnTaskbar){[boolean]$DisableStoreOnTaskbar = [boolean]::Parse($tsenv.Value("CFG_DisableStoreOnTaskbar"))}
+    If($tsenv:CFG_EnableSecureLogonCAD){[boolean]$EnableSecureLogonCAD = [boolean]::Parse($tsenv.Value("CFG_EnableSecureLogonCAD"))}
+    If($tsenv:CFG_DisableAllNotifications){[boolean]$DisableAllNotifications = [boolean]::Parse($tsenv.Value("CFG_DisableAllNotifications"))}
+    If($tsenv:CFG_EnableVerboseMsg){[boolean]$EnableVerboseStatusMsg = [boolean]::Parse($tsenv.Value("CFG_EnableVerboseMsg"))}
+    If($tsenv:CFG_DisableAutoRun){[boolean]$DisableAutoRun = [boolean]::Parse($tsenv.Value("CFG_DisableAutorun"))}
+    If($tsenv:CFG_PreferIPv4OverIPv6){[boolean]$PreferIPv4OverIPv6 = [boolean]::Parse($tsenv.Value("CFG_PreferIPv4OverIPv6"))}
+    If($tsenv:CFG_EnableAppsRunAsAdmin){[boolean]$EnableAppsRunAsAdmin = [boolean]::Parse($tsenv.Value("CFG_EnableAppsRunAsAdmin"))}
+    If($tsenv:CFG_HideDrives){[boolean]$HideDrivesWithNoMedia = [boolean]::Parse($tsenv.Value("CFG_HideDrives"))}
     If($tsenv:CFG_DisableActionCenter){[boolean]$DisableActionCenter = [boolean]::Parse($tsenv.Value("CFG_DisableActionCenter"))}
     If($tsenv:CFG_DisableFeedback){[boolean]$DisableFeedback = [boolean]::Parse($tsenv.Value("CFG_DisableFeedback"))}
-    If($tsenv:CFG_DisableWindowsUpgrades){[boolean]$DisableWindowsUpgrades = [boolean]::Parse($tsenv.Value("CFG_DisableWindowsUpgrades"))}
-    If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
+    If($tsenv:CFG_DisableWUP2P){[boolean]$DisableWUP2P = [boolean]::Parse($tsenv.Value("CFG_DisableWUP2P"))}
     If($tsenv:CFG_DisablePreviewBuild){[boolean]$DisablePreviewBuild = [boolean]::Parse($tsenv.Value("CFG_DisablePreviewBuild"))}
-    If($tsenv:CFG_DisableAppSuggestions){[boolean]$DisableAppSuggestions = [boolean]::Parse($tsenv.Value("CFG_DisableAppSuggestions"))}
-    If($tsenv:CFG_DisableActivityHistory){[boolean]$DisableActivityHistory = [boolean]::Parse($tsenv.Value("CFG_DisableActivityHistory"))}
-    If($tsenv:CFG_DisableAdminShares){[boolean]$DisableAdminShares = [boolean]::Parse($tsenv.Value("CFG_DisableAdminShares"))}
     If($tsenv:CFG_DisableDriverUpdates){[boolean]$DisableDriverUpdates = [boolean]::Parse($tsenv.Value("CFG_DisableDriverUpdates"))}
+    If($tsenv:CFG_DisableWindowsUpgrades){[boolean]$DisableWindowsUpgrades = [boolean]::Parse($tsenv.Value("CFG_DisableWindowsUpgrades"))}
+    If($tsenv:CFG_ApplyPrivacyMitigations){[boolean]$ApplyPrivacyMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyPrivacyMitigations"))}
+    If($tsenv:CFG_RemoveRebootOnLockScreen){[boolean]$RemoveRebootOnLockScreen = [boolean]::Parse($tsenv.Value("CFG_RemoveRebootOnLockScreen"))}
+
+    #//System Adv Settings
+    If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
+    If($tsenv:CFG_ForceStrictSmartCardLogon){[boolean]$ForceStrictSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_ForceStrictSmartCardLogon"))}
+    If($tsenv:CFG_EnableFIPS){[boolean]$EnableFIPS = [boolean]::Parse($tsenv.Value("CFG_EnableFIPS"))}
+    If($tsenv:CFG_EnableCredGuard){[boolean]$EnableCredGuard = [boolean]::Parse($tsenv.Value("CFG_EnableCredGuard"))}
+    If($tsenv:CFG_DisableUAC){[boolean]$DisableUAC = [boolean]::Parse($tsenv.Value("CFG_DisableUAC"))}
+    If($tsenv:CFG_EnableStrictUAC){[boolean]$EnableStrictUAC = [boolean]::Parse($tsenv.Value("CFG_EnableStrictUAC"))}
+    If($tsenv:CFG_EnableRDP){[boolean]$EnableRDP = [boolean]::Parse($tsenv.Value("CFG_EnableRDP"))}
+    If($tsenv:CFG_EnableWinRM){[boolean]$EnableWinRM = [boolean]::Parse($tsenv.Value("CFG_EnableWinRM"))}
+    If($tsenv:CFG_EnableRemoteRegistry){[boolean]$EnableRemoteRegistry = [boolean]::Parse($tsenv.Value("CFG_EnableRemoteRegistry"))}
+    If($tsenv:CFG_EnableUEV){[boolean]$EnableUEV = [boolean]::Parse($tsenv.Value("CFG_EnableUEV"))}
+    If($tsenv:CFG_EnableAppV){[boolean]$EnableAppV = [boolean]::Parse($tsenv.Value("CFG_EnableAppV"))}
+    If($tsenv:CFG_EnablePSLoggingg){[boolean]$EnablePSLogging = [boolean]::Parse($tsenv.Value("CFG_EnablePSLogging"))}
     If($tsenv:CFG_EnableLinuxSubSystem){[boolean]$EnableLinuxSubSystem = [boolean]::Parse($tsenv.Value("CFG_EnableLinuxSubSystem"))}
-    If($tsenv:CFG_EnableTaskbarAutoColor){[boolean]$EnableTaskbarAutoColor = [boolean]::Parse($tsenv.Value("CFG_EnableTaskbarAutoColor"))}
+    If($tsenv:CFG_DisableAdminShares){[boolean]$DisableAdminShares = [boolean]::Parse($tsenv.Value("CFG_DisableAdminShares"))}
+    If($tsenv:CFG_DisableSchTasks){[boolean]$DisableSchTasks = [boolean]::Parse($tsenv.Value("CFG_DisableSchTasks"))}
+    If($tsenv:CFG_DisableDefender){[boolean]$DisableDefender = [boolean]::Parse($tsenv.Value("CFG_DisableDefender"))}
+    If($tsenv:CFG_DisableFirewall){[boolean]$DisableFirewall = [boolean]::Parse($tsenv.Value("CFG_DisableFirewall"))}
+    If($tsenv:CFG_DisableWireless){[boolean]$DisableWireless = [boolean]::Parse($tsenv.Value("CFG_DisableWireless"))}
+    If($tsenv:CFG_DisableBluetooth){[boolean]$DisableBluetooth = [boolean]::Parse($tsenv.Value("CFG_DisableBluetooth"))}
+    If($tsenv:CFG_DisableNewNetworkDialog){[boolean]$DisableNewNetworkDialog = [boolean]::Parse($tsenv.Value("CFG_DisableNewNetworkDialog"))}
+    If($tsenv:CFG_DisableInternetServices){[boolean]$DisableInternetServices = [boolean]::Parse($tsenv.Value("CFG_DisableInternetServices"))}
+    If($tsenv:CFG_DisabledUnusedServices){[boolean]$DisabledUnusedServices = [boolean]::Parse($tsenv.Value("CFG_DisabledUnusedServices"))}
+    If($tsenv:CFG_DisabledUnusedFeatures){[boolean]$DisabledUnusedFeatures = [boolean]::Parse($tsenv.Value("CFG_DisabledUnusedFeatures"))}
+    If($tsenv:CFG_DisableIndexing){[boolean]$DisableIndexing = [boolean]::Parse($tsenv.Value("CFG_DisableIndexing"))}
+    If($tsenv:CFG_RemoveActiveSetupComponents){[boolean]$RemoveActiveSetupComponents = [boolean]::Parse($tsenv.Value("CFG_RemoveActiveSetupComponents"))}
+    If($tsenv:CFG_PreCompileAssemblies){[boolean]$PreCompileAssemblies = [boolean]::Parse($tsenv.Value("CFG_PreCompileAssemblies"))}
     If($tsenv:CFG_OptimizeNetwork){[boolean]$OptimizeNetwork = [boolean]::Parse($tsenv.Value("CFG_OptimizeNetwork"))}
 }
 
@@ -1155,24 +1268,37 @@ If ($InstallPSModules)
             If (!(Test-Path $NuGetAssemblyDestPath)){
                 Write-LogEntry ("Copying nuget Assembly [{0}] to [{1}]..." -f $NuGetAssemblyVersion,$NuGetAssemblyDestPath)
                 New-Item $NuGetAssemblyDestPath -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
-                Copy-Item -Path $NuGetAssemblySourcePath.FullName -Destination $NuGetAssemblyDestPath -Force -ErrorAction SilentlyContinue | Out-Null
+                Copy-ItemWithProgress -Source $NuGetAssemblySourcePath.FullName -Destination $NuGetAssemblyDestPath
             }
         }
     }
 
-    If($InstallModulesPath.count -gt 0){
-        $i = 1
-        Write-LogEntry $CFGMessage
+    If($InstallModules.count -gt 0){
+        Foreach($module in $InstallModules){
+            
+            #remove the modules path from the full path to get the sub folders
+            $Startfolders = ($module.FullName).replace("$modulesPath\","")
 
-        Foreach($module in $InstallModulesPath){
-            Import-Module -name $module.FullName -Global -NoClobber -Force | Out-Null
+            #only need the fist folder after modules path
+            $ModuleFolder = $Startfolders.split("\")[0]
 
-            #Status is what shows up in MDT progressUI
-            Show-ProgressStatus -Message $CFGMessage -SubMessage (": {0} ({1} of {2})" -f $module.FullName,$i,$items.count) -Step $i -MaxStep $module.count
-            $i++
+            #copy the root directory and its contents
+            Copy-ItemWithProgress -Source "$modulesPath\$ModuleFolder" -Destination "$env:ProgramFiles\WindowsPowerShell\Modules\$ModuleFolder" -Force
+            
+            #now grab the copied module location (search for the psm1)
+            #$copiedmodule = Get-ChildItem "$env:ProgramFiles\WindowsPowerShell\Modules\$ModuleFolder" -Filter *.psm1 -Recurse | select -First 1
+            #Import-Module -name $copiedmodule.FullName -Global -NoClobber -Force | Out-Null
         }
     }
 
+}
+Else{$stepCounter++}
+
+
+If($RemoveRebootOnLockScreen){
+    Write-LogEntry "Disabling Shutdown on Lock screen..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'ShutdownWithoutLogon' -Type DWord -Value '0' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'DisablePasswordChange' -Type DWord -Value '1' -Force
 }
 Else{$stepCounter++}
 
@@ -1279,7 +1405,7 @@ If($EnablePSLogging)
 Else{$stepCounter++}
 
 
-If ($EnableSystemVerboseMsg)
+If ($EnableVerboseStatusMsg)
 {
     #https://support.microsoft.com/en-us/help/325376/how-to-enable-verbose-startup-shutdown-logon-and-logoff-status-message
     Show-ProgressStatus -Message "Setting Windows Startup to Verbose messages" -Step ($stepCounter++) -MaxStep $script:Maxsteps
@@ -1376,12 +1502,10 @@ If ($DisableAutoRun)
     Set-UserSetting -Message ("{0}Disabling Devices Auto" -f $prefixmsg) -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:6] :: "}
-    Write-LogEntry ("{0}Disabling Autorun for AllUsers:" -f $prefixmsg)
-    #New-Item -Path $settingspath -ErrorAction SilentlyContinue | Out-Null
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name HonorAutorunSetting -Type DWord -Value 1 -Force
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
+    Set-UserSetting -Message ("{0}Disabling Honor Autorun:" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name HonorAutorunSetting -Type DWord -Value 1 -Force
+    Set-UserSetting -Message ("{0}Disabling NoDrive Autorun" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveAutoRun -Type DWord -Value 67108863 -Force
+    Set-UserSetting -Message ("{0}Disabling No DriveType Autorun" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name NoDriveTypeAutorun -Type DWord -Value 0xFF -Force
+    Set-UserSetting -Message ("{0}Disabling Autoplay" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers" -Name DisableAutoPlay -Type DWord -Value 1 -Force
     
 }
 Else{$stepCounter++}
@@ -1566,7 +1690,7 @@ If ($DisableWMPFirstRunWizard)
 Else{$stepCounter++}
 
 
-If($EnableSecureLogonCtrlAltDelete)
+If($EnableSecureLogonCAD)
 {
   	# Disable IE First Run Wizard
 	Show-ProgressStatus -Message "Enabling Secure Logon Screen Settings..." -Step ($stepCounter++) -MaxStep $script:Maxsteps
@@ -1914,19 +2038,74 @@ If($DisableSmartCardLogon){
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'SCForeOption' -Type DWord -Value '0' -Force -TryLGPO:$true 
 }
 Else{
-    <#
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'DisplayEmptySmartCardTileWhenNoReader' -Type DWord -Value '1' -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'SmartCardCredentialProvider' -Type DWord -Value '1' -Force -TryLGPO:$true  
-    #HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\
-    #ActivClient Provider = {05A69B2E-F05A-426b-BB43-7895A67B1A56}
-    #Microsoft smartcard credential provider = {8FD7E19C-3BF7-489B-A72C-846AB3678C96}
 
-    Write-LogEntry "Configuring Smart Card removal to Force Logoff..."
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force
     #> 
     $stepCounter++
 }
 
+
+If($ForceStrictSmartCardLogon){
+    Write-LogEntry "Change provider to default to smartcard login"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System\DefaultCredentialProvider' -Name 'SmartCardCredentialProvider' -Type String -Value '{8FD7E19C-3BF7-489B-A72C-846AB3678C96}' -Force -TryLGPO:$true  
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'SmartCardCredentialProvider' -Type DWord -Value '1' -Force -TryLGPO:$true  
+  
+    Write-LogEntry "Allow certificates with no extended key usage certificate attribute"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'AllowCertificatesWithNoEKU' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Allow Integrated Unblock screen to be displayed at the time of logon"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'AllowIntegratedUnblock' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Filter duplicate logon certificates"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'FilterDuplicateCerts' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Force the reading of all certificates from the smart card"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'ForceReadingAllCertificates' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Allow signature keys valid for Logon"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'AllowSignatureOnlyKeys' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Allow time invalid certificates"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'AllowTimeInvalidCertificates' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Display string when smart card is blocked"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'IntegratedUnblockPromptString' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Reverse the subject name stored in a certificate when displaying"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'ReverseSubject' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Prevent plaintext PINs from being returned by Credential Manager"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'DisallowPlaintextPin' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Allow user name hint"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'X509HintsNeeded' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Allow ECC certificates to be used for logon and authentication"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'EnumerateECCCerts' -Type DWord -Value '1' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Disabling smartcard reader if no reader found"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'DisplayEmptySmartCardTileWhenNoReader' -Type DWord -Value '0' -Force -TryLGPO:$true
+    
+    Write-LogEntry "Configuring Smart Card removal to Force Logoff..."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force
+
+    Write-LogEntry "Disabling Picture Password Login"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{2135f72a-90b5-4ed3-a7f1-8bb705ac276a}' -Name 'Disabled' -Type DWord -Value '1' -Force
+    
+    Write-LogEntry "Disabling Windows Hello Login"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{8AF662BF-65A0-4D0A-A540-A338A999D36F}' -Name 'Disabled' -Type DWord -Value '1' -Force
+    
+    Write-LogEntry "Disabling Biometrics Login"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{BEC09223-B018-416D-A0AC-523971B639F5}' -Name 'Disabled' -Type DWord -Value '1' -Force
+    
+    Write-LogEntry "Disabling PIN Login"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{cb82ea12-9f71-446d-89e1-8d0924e1256e}' -Name 'Disabled' -Type DWord -Value '1' -Force
+    
+    Write-LogEntry "Disabling Cloud Experience Credential Login"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{C5D7540A-CD51-453B-B22B-05305BA03F07}' -Name 'Disabled' -Type DWord -Value '1' -Force
+    
+    Write-LogEntry "Disabling Password Login"
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{60b78e88-ead8-445c-9cfd-0b87f74ea6cd}' -Name 'Disabled' -Type DWord -Value '1' -Force
+}
 
 
 If ($DisableDefender)
@@ -2103,13 +2282,12 @@ If ($DisableCortana)
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:42] :: " -f $prefixmsg}
     Write-LogEntry ("{0}Disabling search and Cortana to use location")
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowSearchToUseLocation' -Type DWord -Value '0' -Force -TryLGPO:$true    
-    
-    Write-LogEntry ("Disabling Cortana for {0}..." -f $ApplyTo)
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "CortanaConsent" -Type DWord -Value 0 -Force 
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Personalization\Settings" -Name "AcceptedPrivacyPolicy" -Type DWord -Value 0 -Force 
-    Set-UserSetting -Path "SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitTextCollection" -Type DWord -Value 1 -Force 
-    Set-UserSetting -Path "SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitInkCollection" -Type DWord -Value 1 -Force 
-    Set-UserSetting -Path "SOFTWARE\Microsoft\InputPersonalization\TrainedDataStore" -Name "HarvestContacts" -Type DWord -Value 0 -Force 
+
+    Set-UserSetting -Message "Disabling Cortana Consent" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "CortanaConsent" -Type DWord -Value 0 -Force 
+    Set-UserSetting -Message "Disabling Privacy Policy" -Path "SOFTWARE\Microsoft\Personalization\Settings" -Name "AcceptedPrivacyPolicy" -Type DWord -Value 0 -Force 
+    Set-UserSetting -Message "Disabling Text Collection" -Path "SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitTextCollection" -Type DWord -Value 1 -Force 
+    Set-UserSetting -Message "Disabling Ink Collection" -Path "SOFTWARE\Microsoft\InputPersonalization" -Name "RestrictImplicitInkCollection" -Type DWord -Value 1 -Force 
+    Set-UserSetting -Message "Disabling contacts" -Path "SOFTWARE\Microsoft\InputPersonalization\TrainedDataStore" -Name "HarvestContacts" -Type DWord -Value 0 -Force 
     
 }
 Else{$stepCounter++}
@@ -2264,8 +2442,8 @@ If ($ApplyPrivacyMitigations)
     Set-UserSetting -Message "Privacy Mitigations :: Disabling Tailored Experiences" -Path "SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableTailoredExperiencesWithDiagnosticData" -Type DWord -Value 1 -Force -TryLGPO:$true
     Set-UserSetting -Message "Privacy Mitigations :: Hiding Microsoft Account Protection warning" "SOFTWARE\Microsoft\Windows Security Health\State" -Name "AccountProtection_MicrosoftAccount_Disconnected" -Type DWord -Value 1 -Force 
 	Set-UserSetting -Message "Privacy Mitigations :: Disabling Website Access to Language List" -Path "Control Panel\International\User Profile" -Name "HttpAcceptLanguageOptOut" -Type DWord -Value 1 -Force 
-    Set-UserSetting -Path "SOFTWARE\Microsoft\GameBar" -Name "AutoGameModeEnabled" -Type DWord -Value 0 
-	Set-UserSetting -Path "System\GameConfigStore" -Name "GameDVR_Enabled" -Type DWord -Value 0 
+    Set-UserSetting -Message "Disabling GameBar" -Path "SOFTWARE\Microsoft\GameBar" -Name "AutoGameModeEnabled" -Type DWord -Value 0 
+	Set-UserSetting -Message "Disabling Game DVR" -Path "System\GameConfigStore" -Name "GameDVR_Enabled" -Type DWord -Value 0 
 
 }
 Else{$stepCounter++}
@@ -2715,9 +2893,19 @@ If($DisableActivityHistory)
 }
 Else{$stepCounter++}
 
+If($DisableFontSmoothing)
+{
+    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:89] :: "}
+    Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect..." -f $prefixmsg)
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing' -Name 'DefaultValue' -Type DWord -Value '0' -Force
+}
+Else{$stepCounter++}
+
 
 If($EnableVisualPerformance)
 {
+    Additional Performance changes
+    
     # thanks to camxct
     #https://github.com/camxct/Win10-Initial-Setup-Script/blob/master/Win10.psm1
     Show-ProgressStatus -Message "Adjusting visual effects for performance" -Step ($stepCounter++) -MaxStep $script:Maxsteps	
@@ -2732,13 +2920,11 @@ If($EnableVisualPerformance)
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:84] :: "}
     Write-LogEntry ("{0}Disabling Animations in the taskbar Visual Effect..." -f $prefixmsg)
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations' -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:85] :: "}
     Write-LogEntry ("{0}Disabling Enable Peek Visual Effect..." -f $prefixmsg)
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled' -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:86] :: "}
     Write-LogEntry ("{0}Disabling Save taskbar thumbnail previews Visual Effect..." -f $prefixmsg)
@@ -2752,32 +2938,14 @@ If($EnableVisualPerformance)
     Write-LogEntry ("{0}Disabling Show window contents while dragging Visual Effect..." -f $prefixmsg)
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows' -Name 'DefaultValue' -Type DWord -Value '0' -Force
 
-    If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:89] :: "}
-    Write-LogEntry ("{0}Disabling Smooth edges of screen fonts Visual Effect..." -f $prefixmsg)
-	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing' -Name 'DefaultValue' -Type DWord -Value '0' -Force
-
+    
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:90] :: "}
     Write-LogEntry ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect..." -f $prefixmsg)
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow' -Name 'DefaultValue' -Type DWord -Value '0' -Force
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:72] :: "}
-    Set-UserSetting -Message ("{0}Setting Windows Visual Effects to Optimized for best performance" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 2 -Force
+    Set-UserSetting -Message ("{0}Setting Windows Visual Effects to Optimized for best performance" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 3 -Force
     Set-UserSetting -Message ("{0}Disabling Checkbox selections on folders and files" -f $prefixmsg) -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
-
-    <# Additional Performance changes
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\Themes" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    #>
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
 	Set-UserSetting -Message ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax" -Name 'DefaultValue' -Type DWord -Value '0' -Force
@@ -2832,20 +3000,26 @@ If($EnableVisualPerformance)
     Set-UserSetting -Message ("{0}Disabling Use drop shadows for icon labels on the desktop Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListviewShadow" -Type DWord -Value 0 -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:10] :: "}
-    Write-LogEntry ("{0}Disabling Delaying Show the Reduce Menu for AllUsers" -f $prefixmsg)
+    Write-LogEntry ("{0}Disabling Keyboard and Menu Delay for AllUsers" -f $prefixmsg)
     Set-UserSetting -Message ("{0}Setting Delaying Show the Reduce Menu" -f $prefixmsg) -Path "Control Panel\Desktop" -Name MenuShowDelay -Type DWord -Value 120 -Force
-	Set-UserSetting -Message ("{0}Removing Keyboard Delay the Reduce Menu" -f $prefixmsg)-Path "Control Panel\Keyboard" -Name "KeyboardDelay" -Type DWord -Value 0 -Force
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Type DWord -Value 1 -Force
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Type DWord -Value 0 -Force   
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Type DWord -Value 0 -Force
-
-            
-    Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on local Folders for User: {0}..." -f $UserID)
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbnailCache" -Type DWord -Value 1 -Force
-            
-    Write-LogEntry ("Disabling Disable creating thumbnail cache [Thumbs.db] on Network Folders for User: {0}..." -f $UserID)
-    Set-UserSetting -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbsDBOnNetworkFolders" -Type DWord -Value 1 -Force
-
+	Set-UserSetting -Message ("{0}Removing Keyboard Delay the Reduce Menu" -f $prefixmsg) -Path "Control Panel\Keyboard" -Name "KeyboardDelay" -Type DWord -Value 0 -Force
+    
+    Set-UserSetting -Message ("Disabling creating thumbnail cache [Thumbs.db] on local Folder") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbnailCache" -Type DWord -Value 1 -Force
+    Set-UserSetting -Message ("Disabling creating thumbnail cache [Thumbs.db] on Network Folders") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisableThumbsDBOnNetworkFolders" -Type DWord -Value 1 -Force
+    Set-UserSetting -Message ("Enabling TaskBar Icons Only") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Type DWord -Value 1 -Force
+    Set-UserSetting -Message ("Disabling Desktop Shortcut Icons") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Type DWord -Value 0 -Force   
+    Set-UserSetting -Message ("Disabling Explorer Information Tip") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message ("Disabling Combobox Slide Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Window Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Cursor Shadow") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Content while dragging") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Window shadows") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Listbox smooth scrolling") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Start Menu Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Windows Fade") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Themes") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\Themes" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Thumbnails") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling ToolTip Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
 }
 Else{$stepCounter++}
 
@@ -2853,7 +3027,7 @@ Else{$stepCounter++}
 If($EnableDarkTheme)
 {
     Show-ProgressStatus -Message "Enabling Dark Theme" -Step ($stepCounter++) -MaxStep $script:Maxsteps
-    Set-UserSetting -Message "Enabling Dark Theme" -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Type DWord -Value 0 -Force 
+    Set-UserSetting -Message "Enabling Dark Theme" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Type DWord -Value 0 -Force 
 }
 Else{$stepCounter++}
 
@@ -2872,7 +3046,7 @@ If($EnableNumlockStartup)
 
     #Write-LogEntry  ("Enabing Num lock for Default")
 	#Set-SystemSetting -Path "HKEY_USERS\.DEFAULT\Control Panel\Keyboard" -Name "InitialKeyboardIndicators" -Type DWord -Value 2147483650 -Force
-    Set-UserSetting -Message "Enabing Num lock" -Path "Control Panel\Keyboard" -Name InitialKeyboardIndicators -Value 2147483650 -Type DWord -Force
+    Set-UserSetting -Message "Enabing Num lock" -Path "Control Panel\Keyboard" -Name InitialKeyboardIndicators -Type DWord -Value 2147483650 -Force
 
 	Add-Type -AssemblyName System.Windows.Forms
 	If (!([System.Windows.Forms.Control]::IsKeyLocked('NumLock'))) {
@@ -2955,15 +3129,17 @@ If ($DisableAppSuggestions)
 
     Foreach ($key in $AppSuggestions.GetEnumerator()){
         $AdName = $key.Value
-        Write-LogEntry ("Disabling `"{0}`" option [{1}]..." -f $AdName)
+        Write-LogEntry ("Disabling `"{0}`" option [{1}]..." -f $AdName,$key.Key)
 
         Show-ProgressStatus -Message "Disabling App Suggestions" -SubMessage ("Disabling: `"{2}`" ({0} of {1})" -f $i,$AppSuggestions.count,$AdName) -Step $i -MaxStep $AppSuggestions.count
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0
 
         Set-UserSetting -Message "Disabling App Suggestion" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0 -Force
+        <#
         If ($OSBuildNumber -ge 17134) {
-            Set-UserSetting -Message "Disabling App Suggestion" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount\*windows.data.placeholdertilecollection\Current" -Name "Data" -Type Binary -Value $key.Data[0..15] -Force
+            Set-UserSetting -Message "Disabling App Suggestion" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount\*windows.data.placeholdertilecollection\Current" -Name "Data" -Type Binary -Value " 虦퐁�ǔ " -Force
         }
+        #>
     }
 
     Stop-Process -Name "ShellExperienceHost" -Force -ErrorAction SilentlyContinue
