@@ -9,29 +9,38 @@
         Configurable using custom variables in MDT/SCCM
 
     .PARAM
+        '// Global Settings
         DisableSTIGScript
         CFG_UseLGPOForConfigs
         LGPOPath
+        
+        '// VDI Preference
+        CFG_OptimizeForVDI
+
+        '// STIG Settings
         CFG_ApplySTIGItems
         CFG_ApplyEMETMitigations
-        CFG_OptimizeForVDI
+        
 
     .NOTES
         Author:         Richard Tracy
-        Last Update:    04/17/2019
-        Version:        2.1.0
+        Last Update:    05/10/2019
+        Version:        2.1.1
            
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
-        Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_ApplySTIGItems,CFG_ApplyEMETMitigations,CFG_OptimizeForVDI
+        Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_ApplySTIGItems,CFG_ApplyEMETMitigations
 
-        Then add each option to a priority specifically for your use, like:
+        #Then add each option to a priority specifically for your use, like:
         [Default]
+        CFG_OptimizeForVDI=False
         CFG_ApplySTIGItems=True
         CFG_ApplyEMETMitigations=True
-        CFG_OptimizeForVDI=False
+        
+        #Add script to task sequence
 
     .LOGS
+        2.1.1 - May 10, 2019 - reorganized controls in categories
         2.1.0 - Apr 17, 2019 - added Set-UserSetting function
         2.0.0 - Apr 12, 2019 - added more Windows 10 settings check
         1.5.0 - Mar 29, 2019 - added more options from theVDIGuys script

@@ -1,18 +1,23 @@
 ﻿<#	
     .SYNOPSIS
-        Applies Windows 10 Optimizations and configurations. Supports VDI optmizations	
+        Applies Application Optimizations and configurations. Supports VDI optmizations	
     
     .DESCRIPTION
-		Applies Windows 10 Optimizations and configurations. Supports VDI optmizations
+		Applies Application Optimizations and configurations. Supports VDI optmizations
         Utilizes LGPO.exe to apply group policy item where neceassary.
         Utilizes MDT/SCCM TaskSequence property control
             Configurable using custom variables in MDT/SCCM
 
     .PARAM
+        '// Global Settings
         CFG_DisableAppScript
         CFG_UseLGPOForConfigs
         LGPOPath
+        
+        '// VDI Preference
         CFG_OptimizeForVDI
+        
+        '// Applications Settings
         CFG_DisableOfficeAnimation
         CFG_EnableIESoftwareRender
         CFG_EnableLyncStartup
@@ -28,15 +33,17 @@
 
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
-        Properties=CFG_DisableScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_RemoveAppxPackages,CFG_RemoveFODPackages
+        Properties=CFG_DisableAppScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_DisableOfficeAnimation,CFG_EnableIESoftwareRender,CFG_EnableLyncStartup,CFG_RemoveAppxPackages,CFG_RemoveFODPackages
         
-        Then add each option to a priority specifically for your use, like:
+        #Then add each option to a priority specifically for your use, like:
         [Default]
         CFG_UseLGPOForConfigs=True
         CFG_DisableOfficeAnimation=True
         CFG_EnableIESoftwareRender=True
         CFG_EnableLyncStartup=True
         ...
+
+        #Add script to task sequence
 
     .LINKS
         https://github.com/TheVDIGuys/W10_1803_VDI_Optimize

@@ -108,13 +108,15 @@
 
         Properties=CFG_DisableConfigScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_EnableVisualPerformance,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableDarkTheme,CFG_EnableTaskbarAutoColor,CFG_DisableFontSmoothing,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableOfficeOneNote,CFG_DisableOneDrive,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,CFG_DisableStoreOnTaskbar,CFG_DisableActivityHistory,CFG_SetSmartScreenFilter,CFG_EnableNumlockStartup,CFG_DisableAppSuggestions,,#// System Settings,CFG_InstallPSModules,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_ApplyCustomHost,HostPath,CFG_EnableSecureLogonCAD,CFG_DisableAllNotifications,CFG_EnableVerboseMsg,CFG_DisableAutoRun,CFG_PreferIPv4OverIPv6,CFG_EnableAppsRunAsAdmin,CFG_HideDrives,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWUP2P,CFG_DisablePreviewBuild,CFG_DisableDriverUpdates,CFG_DisableWindowsUpgrades,CFG_ApplyPrivacyMitigations,CFG_RemoveRebootOnLockScreen,CFG_DisableSmartCardLogon,CFG_ForceStrictSmartCardLogon,CFG_EnableFIPS,CFG_EnableCredGuard,CFG_DisableUAC,CFG_EnableStrictUAC,CFG_EnableRDP,CFG_EnableWinRM,CFG_EnableRemoteRegistry,CFG_EnableUEV,CFG_EnableAppV,CFG_EnablePSLoggingg,CFG_EnableLinuxSubSystem,CFG_DisableAdminShares,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableIndexing,CFG_RemoveActiveSetupComponents,CFG_PreCompileAssemblies,CFG_OptimizeNetwork
 
-        Then add each option to a priority specifically for your use, like:
+        #Then add each option to a priority specifically for your use, like:
         [Default]
         CFG_UseLGPOForConfigs=True
         CFG_EnableVerboseMsg=True
         CFG_DisableAutoRun=True
         CFG_CleanSampleFolders=True
         ...
+
+        #Add script to task sequence
 
     .LINKS
         https://github.com/TheVDIGuys/W10_1803_VDI_Optimize
