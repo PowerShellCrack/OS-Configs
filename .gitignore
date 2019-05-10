@@ -3,4 +3,5 @@ nuget/
 /PSModules/*
 !/Tools/
 /Tools/*
+!/Scripts/
 /Scripts/*
