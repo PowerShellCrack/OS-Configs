@@ -23,17 +23,21 @@
         CFG_EnableLyncStartup
         CFG_RemoveAppxPackages
         CFG_RemoveFODPackages
+        CFG_ForceEdgeHomepage
+        CFG_ForceIEHomepage
         
+        '// USE MDT Variable
+        Homepage
     
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/10/2019
-        Version:        1.1.0
+        Last Update:    05/14/2019
+        Version:        1.1.1
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
-        Properties=CFG_DisableAppScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_DisableOfficeAnimation,CFG_EnableIESoftwareRender,CFG_EnableLyncStartup,CFG_RemoveAppxPackages,CFG_RemoveFODPackages
+        Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_DisableAppScript,CFG_DisableOfficeAnimation,CFG_EnableIESoftwareRender,CFG_EnableLyncStartup,CFG_RemoveAppxPackages,CFG_RemoveFODPackages,CFG_ForceEdgeHomepage,CFG_ForceIEHomepage
         
         #Then add each option to a priority specifically for your use, like:
         [Default]
@@ -50,6 +54,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
+        1.1.1 - May 14, 2019 - Added IE and EDGE homepage configuration
         1.1.0 - May 10, 2019 - added appx removal Feature on Demand removal, reorganized controls in categories
         1.0.4 - May 09, 2019 - added Office detection
         1.0.0 - May 07, 2019 - initial 
@@ -927,7 +932,9 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$EnableLyncStartup = $false
 [boolean]$RemoveAppxPackages = $false
 [boolean]$RemoveFODPackages = $false
-
+[boolean]$ForceIEHomepage = $false
+[boolean]$ForceEdgeHomepage = $false
+[string]$Homepage = "https://google.com"
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
@@ -935,14 +942,18 @@ If($tsenv){
     If($tsenv:CFG_DisableAppScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableAppScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
+    
     #// VDI Preference
     If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))}
+
     #// Applications Settings
     If($tsenv:CFG_DisableOfficeAnimation){[string]$DisableOfficeAnimation = $tsenv.Value("CFG_DisableOfficeAnimation")}
     If($tsenv:CFG_EnableIESoftwareRender){[string]$EnableIESoftwareRender = $tsenv.Value("CFG_EnableIESoftwareRender")}
     If($tsenv:CFG_EnableLyncStartup){[boolean]$EnableLyncStartup = [boolean]::Parse($tsenv.Value("CFG_EnableLyncStartup"))}
     If($tsenv:CFG_RemoveAppxPackages){[boolean]$RemoveAppxPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveAppxPackages"))}
-    If($tsenv:CFG_RemoveFODPackages){[boolean]$RemoveFODPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveFODPackages"))}
+    If($tsenv:CFG_ForceIEHomepage){[boolean]$ForceIEHomepage = [boolean]::Parse($tsenv.Value("CFG_ForceIEHomepage"))}
+    If($tsenv:CFG_ForceEdgeHomepage){[boolean]$ForceEdgeHomepage = [boolean]::Parse($tsenv.Value("CFG_ForceEdgeHomepage"))}
+    If($tsenv:Homepage){[boolean]$Homepage = $tsenv.Value("Homepage")}
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
@@ -1140,5 +1151,33 @@ If($RemoveFODPackages)
 }
 Else{$stepCounter++}
 
+If($Homepage -and $ForceIEHomepage)
+{
+    Set-UserSetting -Message "Enforcing Internet Explorers Homepage" -Path "SOFTWARE\Microsoft\Internet Explorer\Main" -Name "Start Page" -Type String -Value $Homepage -Force
+}
+Else{$stepCounter++}
+
+If($Homepage -and $ForceEdgeHomepage)
+{
+    #https://docs.microsoft.com/en-us/microsoft-edge/deploy/available-policies#configure-open-microsoft-edge-with
+    Show-ProgressStatus -Message ("Enforcing Microsoft's Edge Homepage" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting -Path 'HKCR:\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'HomeButtonEnabled' -Value '0' -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path 'HKCR:\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'HomeButtonPage' -Value '0' -Type String -Value $Homepage -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ConfigureHomeButton" -Type DWord -Value 2 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ProvisionedHomePages" -Type String -Value $Homepage -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ConfigureFavoritesBar" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "DisableLockdownOfStartPages" -Type String -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ConfigureOpenEdgeWith" -Type DWord -Value 3 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "Cookies" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "DoNotTrack" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "FormSuggest Passwords" -Type String -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "AllowPopups" -Type String -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "SyncFavoritesBetweenIEAndMicrosoftEdge" -Type DWord -Value 2 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "PreventAccessToAboutFlagsInMicrosoftEdge" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync' -Name "DisableWebBrowserSettingSyncUserOverride" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\KioskMode' -Name "ConfigureKioskResetAfterIdleTimeout" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name "MicrosoftEdgeDataOptIn" -Type DWord -Value 0 -Force
+}
+Else{$stepCounter++}
 
 Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps
