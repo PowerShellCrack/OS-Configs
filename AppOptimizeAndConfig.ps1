@@ -23,21 +23,17 @@
         CFG_EnableLyncStartup
         CFG_RemoveAppxPackages
         CFG_RemoveFODPackages
-        CFG_ForceEdgeHomepage
-        CFG_ForceIEHomepage
         
-        '// USE MDT Variable
-        Homepage
     
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/14/2019
-        Version:        1.1.1
+        Last Update:    05/10/2019
+        Version:        1.1.0
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
-        Properties=CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_DisableAppScript,CFG_DisableOfficeAnimation,CFG_EnableIESoftwareRender,CFG_EnableLyncStartup,CFG_RemoveAppxPackages,CFG_RemoveFODPackages,CFG_ForceEdgeHomepage,CFG_ForceIEHomepage
+        Properties=CFG_DisableAppScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_DisableOfficeAnimation,CFG_EnableIESoftwareRender,CFG_EnableLyncStartup,CFG_RemoveAppxPackages,CFG_RemoveFODPackages
         
         #Then add each option to a priority specifically for your use, like:
         [Default]
@@ -54,7 +50,6 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
-        1.1.1 - May 14, 2019 - Added IE and EDGE homepage configuration
         1.1.0 - May 10, 2019 - added appx removal Feature on Demand removal, reorganized controls in categories
         1.0.4 - May 09, 2019 - added Office detection
         1.0.0 - May 07, 2019 - initial 
@@ -70,7 +65,7 @@ Function Test-IsISE {
 # try...catch accounts for:
 # Set-StrictMode -Version latest
     try {    
-        return $psISE -ne $null;
+        return $psISE;
     }
     catch {
         return $false;
@@ -410,7 +405,7 @@ Function Set-SystemSetting {
                     $LGPOfile = ($RegKeyHive + '-' + $RegKeyPath.replace('\','-').replace(' ','') + '-' + $RegKeyName.replace(' ','') + '.lgpo')
             
                     #complete LGPO file
-                    Write-LogEntryEntry ("LGPO applying [{3}] to registry: [{0}\{1}\{2}] as a Group Policy item" -f $RegHive,$RegKeyPath,$RegKeyName,$RegKeyName) -Severity 4 -Source ${CmdletName}
+                    Write-LogEntry ("LGPO applying [{3}] to registry: [{0}\{1}\{2}] as a Group Policy item" -f $RegHive,$RegKeyPath,$RegKeyName,$RegKeyName) -Severity 4 -Source ${CmdletName}
                     $lgpoout += "$LGPOHive`r`n"
                     $lgpoout += "$RegKeyPath`r`n"
                     $lgpoout += "$RegKeyName`r`n"
@@ -419,43 +414,44 @@ Function Set-SystemSetting {
                     $lgpoout | Out-File "$env:Temp\$LGPOfile"
 
                     If($VerbosePreference){$args = "/v /q /t"}Else{$args="/q /t"}
-                    Write-LogEntryEntry "Start-Process $LGPOExe -ArgumentList '/t $env:Temp\$LGPOfile' -RedirectStandardError '$env:Temp\$LGPOfile.stderr.log'" -Severity 4 -Source ${CmdletName}
+                    Write-LogEntry "Start-Process $LGPOExe -ArgumentList '/t $env:Temp\$LGPOfile' -RedirectStandardError '$env:Temp\$LGPOfile.stderr.log'" -Severity 4 -Source ${CmdletName}
                     
                     If(!$WhatIfPreference){$result = Start-Process $LGPOExe -ArgumentList "$args $env:Temp\$LGPOfile /v" -RedirectStandardError "$env:Temp\$LGPOfile.stderr.log" -Wait -NoNewWindow -PassThru | Out-Null}
-                    Write-LogEntryEntry ("LGPO ran successfully. Exit code: {0}" -f $result.ExitCode) -Severity 4
+                    Write-LogEntry ("LGPO ran successfully. Exit code: {0}" -f $result.ExitCode) -Severity 4
                 }
                 Else{
-                    Write-LogEntryEntry ("LGPO will not be used. Path not found: {0}" -f $LGPOExe) -Severity 3
+                    Write-LogEntry ("LGPO will not be used. Path not found: {0}" -f $LGPOExe) -Severity 3
 
                 }
             }
             Else{
-                Write-LogEntryEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]...." -f $RegHive,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName}
+                Write-LogEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]...." -f $RegHive,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName}
             }
         }
         Catch{
             If($TryLGPO -and $LGPOExe){
-                Write-LogEntryEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]...." -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]...." -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
             }
         }
         Finally
         {
-            start-sleep 3
+            #wait for LGPO file to finish generating
+            start-sleep 1
             
             #verify the registry value has been set
             Try{
                 If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
-                    Write-LogEntryEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]...." -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
-                    New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference | Out-Null
-                    New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference | Out-Null
+                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]...." -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
+                    New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
                 } 
                 Else{
-                    Write-LogEntryEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
-                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference | Out-Null
+                    Write-LogEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
+                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
                 }
             }
             Catch{
-                Write-LogEntryEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegHive,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName}
+                Write-LogEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegHive,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName}
             }
 
         }
@@ -538,7 +534,7 @@ Function Set-UserSetting {
 
         #check if hive is local machine.
         If($RegKeyHive -match "HKEY_LOCAL_MACHINE|HKLM|HKCR"){
-            Write-LogEntryEntry "Registry path is not a user path. Use Set-SystemSetting cmdlet"
+            Write-LogEntry "Registry path is not a user path. Use Set-SystemSetting cmdlet"
             return
         }
         #check if hive is user hive
@@ -567,7 +563,7 @@ Function Set-UserSetting {
             } 
         }
         Else{
-            Write-LogEntryEntry "User registry key not found or specified. Unable to continue..." -Severity 3
+            Write-LogEntry "User registry key not found or specified. Unable to continue..." -Severity 3
             return
 
         }
@@ -648,7 +644,7 @@ Function Set-UserSetting {
                 }
 
                 If ($HiveLoaded -eq $true) {   
-                    If($Message){Write-LogEntryEntry ("{0} for User [{1}]..." -f $Message,$UserID)}
+                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserID)}
                     If($Remove){
                         Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
                     }
@@ -667,7 +663,7 @@ Function Set-UserSetting {
             }
         }
         Else{
-            If($Message){Write-LogEntryEntry ("{0} for [{1}]..." -f $Message,$ApplyTo)}
+            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ApplyTo)}
             If($Remove){
                 Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
             }
@@ -734,7 +730,7 @@ Function Get-InstalledApplication {
 	}
 	Process {
 		If ($name) {
-			Write-LogEntryEntry -Message "Get information for installed Application Name(s) [$($name -join ', ')]..." -Source ${CmdletName} -Outhost:$Outhost
+			Write-LogEntry -Message "Get information for installed Application Name(s) [$($name -join ', ')]..." -Source ${CmdletName} -Outhost:$Outhost
 		}
 		If ($productCode) {
 			Write-LogEntry -Message "Get information for installed Product Code [$ProductCode]..." -Source ${CmdletName} -Outhost:$Outhost
@@ -932,9 +928,7 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$EnableLyncStartup = $false
 [boolean]$RemoveAppxPackages = $false
 [boolean]$RemoveFODPackages = $false
-[boolean]$ForceIEHomepage = $false
-[boolean]$ForceEdgeHomepage = $false
-[string]$Homepage = "https://google.com"
+
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
@@ -942,23 +936,19 @@ If($tsenv){
     If($tsenv:CFG_DisableAppScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableAppScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
-    
     #// VDI Preference
     If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))}
-
     #// Applications Settings
     If($tsenv:CFG_DisableOfficeAnimation){[string]$DisableOfficeAnimation = $tsenv.Value("CFG_DisableOfficeAnimation")}
     If($tsenv:CFG_EnableIESoftwareRender){[string]$EnableIESoftwareRender = $tsenv.Value("CFG_EnableIESoftwareRender")}
     If($tsenv:CFG_EnableLyncStartup){[boolean]$EnableLyncStartup = [boolean]::Parse($tsenv.Value("CFG_EnableLyncStartup"))}
     If($tsenv:CFG_RemoveAppxPackages){[boolean]$RemoveAppxPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveAppxPackages"))}
-    If($tsenv:CFG_ForceIEHomepage){[boolean]$ForceIEHomepage = [boolean]::Parse($tsenv.Value("CFG_ForceIEHomepage"))}
-    If($tsenv:CFG_ForceEdgeHomepage){[boolean]$ForceEdgeHomepage = [boolean]::Parse($tsenv.Value("CFG_ForceEdgeHomepage"))}
-    If($tsenv:Homepage){[boolean]$Homepage = $tsenv.Value("Homepage")}
+    If($tsenv:CFG_RemoveFODPackages){[boolean]$RemoveFODPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveFODPackages"))}
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
 If($DisableScript){
-    Write-LogEntryEntry "Script is disabled!"
+    Write-LogEntry "Script is disabled!"
     Exit 0
 }
 
@@ -1151,33 +1141,5 @@ If($RemoveFODPackages)
 }
 Else{$stepCounter++}
 
-If($Homepage -and $ForceIEHomepage)
-{
-    Set-UserSetting -Message "Enforcing Internet Explorers Homepage" -Path "SOFTWARE\Microsoft\Internet Explorer\Main" -Name "Start Page" -Type String -Value $Homepage -Force
-}
-Else{$stepCounter++}
-
-If($Homepage -and $ForceEdgeHomepage)
-{
-    #https://docs.microsoft.com/en-us/microsoft-edge/deploy/available-policies#configure-open-microsoft-edge-with
-    Show-ProgressStatus -Message ("Enforcing Microsoft's Edge Homepage" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
-    Set-SystemSetting -Path 'HKCR:\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'HomeButtonEnabled' -Value '0' -Type DWord -Value 1 -Force
-    Set-SystemSetting -Path 'HKCR:\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'HomeButtonPage' -Value '0' -Type String -Value $Homepage -Force
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ConfigureHomeButton" -Type DWord -Value 2 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ProvisionedHomePages" -Type String -Value $Homepage -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ConfigureFavoritesBar" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "DisableLockdownOfStartPages" -Type String -Value 1 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name "ConfigureOpenEdgeWith" -Type DWord -Value 3 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "Cookies" -Type DWord -Value 0 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "DoNotTrack" -Type DWord -Value 0 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "FormSuggest Passwords" -Type String -Value 0 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "AllowPopups" -Type String -Value 1 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "SyncFavoritesBetweenIEAndMicrosoftEdge" -Type DWord -Value 2 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name "PreventAccessToAboutFlagsInMicrosoftEdge" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync' -Name "DisableWebBrowserSettingSyncUserOverride" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\KioskMode' -Name "ConfigureKioskResetAfterIdleTimeout" -Type DWord -Value 0 -Force -TryLGPO:$true
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name "MicrosoftEdgeDataOptIn" -Type DWord -Value 0 -Force
-}
-Else{$stepCounter++}
 
 Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps
