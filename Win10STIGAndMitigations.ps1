@@ -57,15 +57,17 @@
 Function Test-IsISE {
     # try...catch accounts for:
     # Set-StrictMode -Version latest
-        try {    
-            return $psISE -ne $null;
-        }
-        catch {
-            return $false;
-        }
+    try {    
+        return $psISE -ne $null;
     }
-    
+    catch {
+        return $false;
+    }
+}
+
 Function Get-ScriptPath {
+    If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostInvocation } Else { $InvocationInfo = $MyInvocation }
+
     # Makes debugging from ISE easier.
     if ($PSScriptRoot -eq "")
     {
@@ -83,8 +85,9 @@ Function Get-ScriptPath {
     }
     else
     {
-        #$root = $PSScriptRoot
-        $MyInvocation.MyCommand.Path
+        #$PSScriptRoot
+        $PSCommandPath
+        #$MyInvocation.MyCommand.Path
     }
 }
 
