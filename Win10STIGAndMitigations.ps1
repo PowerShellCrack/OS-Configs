@@ -713,25 +713,20 @@ $scriptPath = Get-ScriptPath
 [int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
 [string]$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
 
-
-Import-SMSTSENV
-
 #Create Paths
 $ToolsPath = Join-Path $scriptDirectory -ChildPath 'Tools'
 $AdditionalScriptsPath = Join-Path $scriptDirectory -ChildPath 'Scripts'
-$ModulesPath = Join-Path -Path $scriptDirectory -ChildPath 'PSModules'
-$BinPath = Join-Path -Path $scriptDirectory -ChildPath 'Bin'
-$FilesPath = Join-Path -Path $scriptDirectory -ChildPath 'Files'
 
 #if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
 If($tsenv){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
 If($tsenv -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
 
 #grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
 #set counter to one
 $stepCounter = 1
 
+#check if running in verbose mode
 $Global:Verbose = $false
 If($PSBoundParameters.ContainsKey('Debug') -or $PSBoundParameters.ContainsKey('Verbose')){
     $Global:Verbose = $PsBoundParameters.Get_Item('Verbose')
@@ -742,39 +737,35 @@ Else{
     $VerbosePreference = 'SilentlyContinue'
 }
 
-If(!$LogPath){$LogPath = $env:TEMP}
+#Check if running in Task Sequence
+Import-SMSTSENV
+
 [string]$FileName = $scriptBaseName +'.log'
-$Global:LogFilePath = Join-Path $LogPath -ChildPath $FileName
-Write-Host "Using log file: $LogFilePath"
+$Global:LogFilePath = Join-Path $RelativeLogPath -ChildPath $FileName
+Write-Host "Using log file: $LogFilePath" -ForegroundColor Cyan
 
 ##*===========================================================================
-##* DEFAULTS: Configurations are hardcoded here (change values if needed)
+##* DEFAULTS: Configurations are here (change values if needed)
 ##*===========================================================================
-#// Global Settings
+# Global Settings
 [boolean]$DisableScript = $false
 [string]$Global:LGPOPath = "$ToolsPath\LGPO\LGPO.exe"
 [boolean]$UseLGPO = $true
-
-#// VDI Preference
+# VDI Preference
 [boolean]$OptimizeForVDI = $false
-
-#// STIG Settings
+# STIG Settings
 [boolean]$ApplySTIGItems = $false
 [boolean]$ApplyEMETMitigations = $false
 
-
-
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
-    #// Global Settings
+    # Global Settings
     If($tsenv:CFG_DisableSTIGScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableSTIGScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
-    
-    #// VDI Preference
+    # VDI Preference
     If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))} 
-    
-    #// STIG Settings
+    # STIG Settings
     If($tsenv:CFG_ApplySTIGItems){[boolean]$ApplySTIGItems = [boolean]::Parse($tsenv.Value("CFG_ApplySTIGItems"))}
     If($tsenv:CFG_ApplyEMETMitigations){[boolean]$ApplyEMETMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyEMETMitigations"))}
 }

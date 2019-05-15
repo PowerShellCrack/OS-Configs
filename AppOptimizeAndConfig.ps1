@@ -873,27 +873,20 @@ $scriptPath = Get-ScriptPath
 [string]$scriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($scriptName)
 
 [int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
-[string]$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
-
-
-Import-SMSTSENV
 
 #Create Paths
 $ToolsPath = Join-Path $scriptDirectory -ChildPath 'Tools'
-$AdditionalScriptsPath = Join-Path $scriptDirectory -ChildPath 'Scripts'
-$ModulesPath = Join-Path -Path $scriptDirectory -ChildPath 'PSModules'
-$BinPath = Join-Path -Path $scriptDirectory -ChildPath 'Bin'
-$FilesPath = Join-Path -Path $scriptDirectory -ChildPath 'Files'
 
 #if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
 If($tsenv){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
 If($tsenv -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
 
 #grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
 #set counter to one
 $stepCounter = 1
 
+#check if running in verbose mode
 $Global:Verbose = $false
 If($PSBoundParameters.ContainsKey('Debug') -or $PSBoundParameters.ContainsKey('Verbose')){
     $Global:Verbose = $PsBoundParameters.Get_Item('Verbose')
@@ -904,23 +897,23 @@ Else{
     $VerbosePreference = 'SilentlyContinue'
 }
 
-If(!$LogPath){$LogPath = $env:TEMP}
+#Check if running in Task Sequence
+Import-SMSTSENV
+
 [string]$FileName = $scriptBaseName +'.log'
-$Global:LogFilePath = Join-Path $LogPath -ChildPath $FileName
-Write-Host "Using log file: $LogFilePath"
+$Global:LogFilePath = Join-Path $RelativeLogPath -ChildPath $FileName
+Write-Host "Using log file: $LogFilePath" -ForegroundColor Cyan
 
 ##*===========================================================================
-##* DEFAULTS: Configurations are hardcoded here (change values if needed)
+##* DEFAULTS: Configurations are here (change values if needed)
 ##*===========================================================================
-#// Global Settings
+# Global Settings
 [boolean]$DisableScript =  $false
 [boolean]$UseLGPO = $true
 [string]$Global:LGPOPath = "$ToolsPath\LGPO\LGPO.exe"
-
-#// VDI Preference
+# VDI Preference
 [boolean]$OptimizeForVDI = $false
-
-#// Applications Settings
+# Applications Settings
 [boolean]$DisableOfficeAnimation = $false
 [boolean]$EnableIESoftwareRender = $false
 [boolean]$EnableLyncStartup = $false
@@ -930,13 +923,13 @@ Write-Host "Using log file: $LogFilePath"
 
 # When running in Tasksequence and configureation exists, use that instead
 If($tsenv){
-    #// Global Settings
+    # Global Settings
     If($tsenv:CFG_DisableAppScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableAppScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
-    #// VDI Preference
+    # VDI Preference
     If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))}
-    #// Applications Settings
+    # Applications Settings
     If($tsenv:CFG_DisableOfficeAnimation){[string]$DisableOfficeAnimation = $tsenv.Value("CFG_DisableOfficeAnimation")}
     If($tsenv:CFG_EnableIESoftwareRender){[string]$EnableIESoftwareRender = $tsenv.Value("CFG_EnableIESoftwareRender")}
     If($tsenv:CFG_EnableLyncStartup){[boolean]$EnableLyncStartup = [boolean]::Parse($tsenv.Value("CFG_EnableLyncStartup"))}

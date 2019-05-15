@@ -219,13 +219,13 @@ Function Import-SMSTSENV{
             # Query the environment to get an existing variable
             # Set a variable for the task sequence log path
             #$Global:Logpath = $tsenv.Value("LogPath")
-            $Global:Logpath = $tsenv.Value("_SMSTSLogPath")
+            $Global:LogPath = $tsenv.Value("_SMSTSLogPath")
 
             # Or, convert all of the variables currently in the environment to PowerShell variables
             $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
         }
         Else{
-            $Global:Logpath = $env:TEMP
+            $Global:LogPath = $env:TEMP
         }
     }
 }
@@ -1014,9 +1014,6 @@ $scriptPath = Get-ScriptPath
 [int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
 [string]$OsCaption = (Get-WmiObject -class Win32_OperatingSystem).Caption
 
-
-Import-SMSTSENV
-
 #Create Paths
 $ToolsPath = Join-Path $scriptDirectory -ChildPath 'Tools'
 $AdditionalScriptsPath = Join-Path $scriptDirectory -ChildPath 'Scripts'
@@ -1029,10 +1026,11 @@ If($tsenv){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = '
 If($tsenv -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
 
 #grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
 #set counter to one
 $stepCounter = 1
 
+#check if running in verbose mode
 $Global:Verbose = $false
 If($PSBoundParameters.ContainsKey('Debug') -or $PSBoundParameters.ContainsKey('Verbose')){
     $Global:Verbose = $PsBoundParameters.Get_Item('Verbose')
@@ -1043,24 +1041,24 @@ Else{
     $VerbosePreference = 'SilentlyContinue'
 }
 
-If(!$LogPath){$LogPath = $env:TEMP}
+#Check if running in Task Sequence
+Import-SMSTSENV
+
 [string]$FileName = $scriptBaseName +'.log'
-$Global:LogFilePath = Join-Path $LogPath -ChildPath $FileName
-Write-Host "Using log file: $LogFilePath"
+$Global:LogFilePath = Join-Path $RelativeLogPath -ChildPath $FileName
+Write-Host "Using log file: $LogFilePath" -ForegroundColor Cyan
 
 ##*===========================================================================
-##* DEFAULTS: Configurations are hardcoded here (change values if needed)
+##* DEFAULTS: Configurations are here (change values if needed)
 ##*===========================================================================
-#// Global Settings
+# Global Settings
 [boolean]$DisableScript = $false
 [boolean]$UseLGPO = $true
 [string]$Global:LGPOPath = "$ToolsPath\LGPO\LGPO.exe"
-
-#// VDI Preference
+# VDI Preference
 [boolean]$OptimizeForVDI = $false 
 [boolean]$EnableVisualPerformance = $false
-
-#// User Preference
+# User Preference
 [boolean]$InstallLogonScript = $false
 [string]$LogonScriptPath = "$PSscriptRoot\Win10-Logon.ps1"
 [boolean]$EnableDarkTheme = $true
@@ -1086,8 +1084,7 @@ Write-Host "Using log file: $LogFilePath"
 [string]$SetSmartScreenFilter = 'User' # Set to 'Off','User','Admin'
 [boolean]$EnableNumlockStartup = $false
 [boolean]$DisableAppSuggestions = $false
-
-#// System Settings
+# System Settings
 [boolean]$InstallPSModules = $false
 [psobject]$InstallModules = Get-ChildItem $ModulesPath -Filter *.psm1 -Recurse
 [string]$SetPowerCFG = 'Custom' # Set 'Custom','High Performance','Balanced'
@@ -1111,8 +1108,7 @@ Write-Host "Using log file: $LogFilePath"
 [boolean]$DisableWindowsUpgrades = $false
 [boolean]$ApplyPrivacyMitigations = $false
 [boolean]$RemoveRebootOnLockScreen = $false
-
-#//System Adv Settings
+# System Adv Settings
 [boolean]$DisableSmartCardLogon = $false
 [boolean]$ForceStrictSmartCardLogon = $false
 [boolean]$EnableFIPS = $false
@@ -1149,12 +1145,10 @@ If($tsenv){
     If($tsenv:CFG_DisableConfigScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableConfigScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
     If($tsenv:LGPOPath){[string]$Global:LGPOPath = $tsenv.Value("LGPOPath")}
-
-    #// VDI Preference
+    # VDI Preference
     If($tsenv:CFG_OptimizeForVDI){[boolean]$OptimizeForVDI = [boolean]::Parse($tsenv.Value("CFG_OptimizeForVDI"))} 
     If($tsenv:CFG_EnableVisualPerformance){[boolean]$EnableVisualPerformance = [boolean]::Parse($tsenv.Value("CFG_EnableVisualPerformance"))}
-
-    #// User Preference
+    # User Preference
     If($tsenv:CFG_InstallLogonScript){[boolean]$InstallLogonScript = [boolean]::Parse($tsenv.Value("CFG_InstallLogonScript"))}
     If($tsenv:CFG_LogonScriptPath){[string]$LogonScriptPath = $tsenv.Value("CFG_LogonScriptPath")}
     If($tsenv:CFG_EnableDarkTheme){[boolean]$EnableDarkTheme = [boolean]::Parse($tsenv.Value("CFG_EnableDarkTheme"))}
@@ -1179,8 +1173,7 @@ If($tsenv){
     If($tsenv:CFG_SetSmartScreenFilter){[string]$SetSmartScreenFilter = $tsenv.Value("CFG_SetSmartScreenFilter")}
     If($tsenv:CFG_EnableNumlockStartup){[boolean]$EnableNumlockStartup = [boolean]::Parse($tsenv.Value("CFG_EnableNumlockStartup"))}
     If($tsenv:CFG_DisableAppSuggestions){[boolean]$DisableAppSuggestions = [boolean]::Parse($tsenv.Value("CFG_DisableAppSuggestions"))}
-
-    #// System Settings
+    # System Settings
     If($tsenv:CFG_InstallPSModules){[boolean]$InstallPSModules = [boolean]::Parse($tsenv.Value("CFG_InstallPSModules"))}
     If($tsenv:CFG_SetPowerCFG){[string]$SetPowerCFG = $tsenv.Value("CFG_SetPowerCFG")}
     If($tsenv:CFG_PowerCFGFilePath){[string]$PowerCFGFilePath = $tsenv.Value("CFG_PowerCFGFilePath")}
@@ -1203,8 +1196,7 @@ If($tsenv){
     If($tsenv:CFG_DisableWindowsUpgrades){[boolean]$DisableWindowsUpgrades = [boolean]::Parse($tsenv.Value("CFG_DisableWindowsUpgrades"))}
     If($tsenv:CFG_ApplyPrivacyMitigations){[boolean]$ApplyPrivacyMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyPrivacyMitigations"))}
     If($tsenv:CFG_RemoveRebootOnLockScreen){[boolean]$RemoveRebootOnLockScreen = [boolean]::Parse($tsenv.Value("CFG_RemoveRebootOnLockScreen"))}
-
-    #//System Adv Settings
+    # System Adv Settings
     If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
     If($tsenv:CFG_ForceStrictSmartCardLogon){[boolean]$ForceStrictSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_ForceStrictSmartCardLogon"))}
     If($tsenv:CFG_EnableFIPS){[boolean]$EnableFIPS = [boolean]::Parse($tsenv.Value("CFG_EnableFIPS"))}
