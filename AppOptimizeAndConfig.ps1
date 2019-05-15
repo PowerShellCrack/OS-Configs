@@ -45,11 +45,11 @@
 
         #Add script to task sequence
 
-    .LINKS
+    .LINK
         https://github.com/TheVDIGuys/W10_1803_VDI_Optimize
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
-    .LOGS
+    .LOG
         1.1.1 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings  
         1.1.0 - May 10, 2019 - added appx removal Feature on Demand removal, reorganized controls in categories
         1.0.4 - May 09, 2019 - added Office detection
@@ -95,40 +95,48 @@ Function Get-ScriptPath {
     }
 }
 
-Function Import-SMSTSENV{
-    ## Get the name of this function
-    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+Function Get-SMSTSENV{
+    param([switch]$LogPath,[switch]$NoWarning)
     
-    try{
-        # Create an object to access the task sequence environment
-        $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
-        #test if variables exist
-        $tsenv.GetVariables()  #| % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
+    Begin{
+        ## Get the name of this function
+        [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
     }
-    catch{
-        If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
-        Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode." -f $prefix)
-        
-        #set variable to null
-        $Script:tsenv = $null
+    Process{
+        try{
+            # Create an object to access the task sequence environment
+            $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
+            #test if variables exist
+            $tsenv.GetVariables()  #| % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
+        }
+        catch{
+            If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
+            If(!$NoWarning){Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode." -f $prefix)}
+            
+            #set variable to null
+            $Script:tsenv = $null
+        }
+        Finally{
+            #set global Logpath
+            if ($tsenv){
+                #grab the progress UI
+                $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
+
+                # Query the environment to get an existing variable
+                # Set a variable for the task sequence log path
+                #$UseLogPath = $tsenv.Value("LogPath")
+                $UseLogPath = $tsenv.Value("_SMSTSLogPath")
+
+                # Convert all of the variables currently in the environment to PowerShell variables
+                $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+            }
+            Else{
+                $UseLogPath = $env:Temp
+            }
+        }
     }
-    Finally{
-        #set global Logpath
-        if ($tsenv){
-            #grab the progress UI
-            $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
-
-            # Query the environment to get an existing variable
-            # Set a variable for the task sequence log path
-            #$Global:Logpath = $tsenv.Value("LogPath")
-            $Global:Logpath = $tsenv.Value("_SMSTSLogPath")
-
-            # Or, convert all of the variables currently in the environment to PowerShell variables
-            $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
-        }
-        Else{
-            $Global:Logpath = $env:TEMP
-        }
+    End{
+        If($LogPath){return $UseLogPath}
     }
 }
 
@@ -897,12 +905,11 @@ Else{
     $VerbosePreference = 'SilentlyContinue'
 }
 
-#Check if running in Task Sequence
-Import-SMSTSENV
-
+#build log name
 [string]$FileName = $scriptBaseName +'.log'
-$Global:LogFilePath = Join-Path $RelativeLogPath -ChildPath $FileName
-Write-Host "Using log file: $LogFilePath" -ForegroundColor Cyan
+#build global log fullpath
+$Global:LogFilePath = Join-Path (Get-SMSTSENV -LogPath -NoWarning) -ChildPath $FileName
+Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 
 ##*===========================================================================
 ##* DEFAULTS: Configurations are here (change values if needed)
@@ -922,7 +929,7 @@ Write-Host "Using log file: $LogFilePath" -ForegroundColor Cyan
 
 
 # When running in Tasksequence and configureation exists, use that instead
-If($tsenv){
+If(Get-SMSTSENV){
     # Global Settings
     If($tsenv:CFG_DisableAppScript){[boolean]$DisableScript = [boolean]::Parse($tsenv.Value("CFG_DisableAppScript"))}
     If($tsenv:CFG_UseLGPOForConfigs){[boolean]$UseLGPO = [boolean]::Parse($tsenv.Value("CFG_UseLGPOForConfigs"))}
