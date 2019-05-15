@@ -27,8 +27,8 @@
     
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/10/2019
-        Version:        1.1.0
+        Last Update:    05/15/2019
+        Version:        1.1.1
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
@@ -50,6 +50,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
+        1.1.1 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings  
         1.1.0 - May 10, 2019 - added appx removal Feature on Demand removal, reorganized controls in categories
         1.0.4 - May 09, 2019 - added Office detection
         1.0.0 - May 07, 2019 - initial 
@@ -60,15 +61,37 @@
 ##*===========================================================================
 ##* FUNCTIONS
 ##*===========================================================================
-
 Function Test-IsISE {
-# try...catch accounts for:
-# Set-StrictMode -Version latest
-    try {    
-        return $psISE;
+    # try...catch accounts for:
+    # Set-StrictMode -Version latest
+        try {    
+            return $psISE -ne $null;
+        }
+        catch {
+            return $false;
+        }
     }
-    catch {
-        return $false;
+    
+Function Get-ScriptPath {
+    # Makes debugging from ISE easier.
+    if ($PSScriptRoot -eq "")
+    {
+        if (Test-IsISE)
+        {
+            $psISE.CurrentFile.FullPath
+            #$root = Split-Path -Parent $psISE.CurrentFile.FullPath
+        }
+        else
+        {
+            $context = $psEditor.GetEditorContext()
+            $context.CurrentFile.Path
+            #$root = Split-Path -Parent $context.CurrentFile.Path
+        }
+    }
+    else
+    {
+        #$root = $PSScriptRoot
+        $MyInvocation.MyCommand.Path
     }
 }
 
@@ -568,7 +591,7 @@ Function Set-UserSetting {
 
         }
 
-
+        #If user profile variable doesn't exist, build one
         If(!$Global:UserProfiles){
             # Get each user profile SID and Path to the profile
             $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
@@ -587,7 +610,7 @@ Function Set-UserSetting {
             [string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
         }
 
-        #overwrite Hive is specified
+        #overwrite Hive if specified
         If($ApplyTo){
             Switch($ApplyTo){
                 'AllUsers' {$RegHive = "HKEY_USERS"; $ProfileList = $Global:UserProfiles}
@@ -601,28 +624,9 @@ Function Set-UserSetting {
                
         If($RegHive -eq "HKEY_USERS"){
 
-            If(!$Global:UserProfiles){
-                # Get each user profile SID and Path to the profile
-                $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
-
-                # Add in the .DEFAULT User Profile
-                $DefaultProfile = "" | Select-Object SID, UserHive
-                $DefaultProfile.SID = "DEFAULT"
-                $DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
-
-                #Add it to the UserProfile list
-                $Global:UserProfiles = @()
-                $Global:UserProfiles += $AllProfiles
-                $Global:UserProfiles += $DefaultProfile
-
-                #get current users sid
-                [string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
-            }
-        
-            
             $p = 1
             # Loop through each profile on the machine
-            Foreach ($UserProfile in $UserProfiles) {
+            Foreach ($UserProfile in $ProfileList) {
                 
                 Try{
                     $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
@@ -632,10 +636,7 @@ Function Set-UserSetting {
                     $UserID = $UserProfile.SID
                 }
 
-                #Write-Host "$($Global:UserProfiles.count)`n$RegHive`n$RegKeyPath`n$UserID"
-                #continue
-
-                If($Message){Show-ProgressStatus -Message $Message -SubMessage ("for user profile ({0} of {1})" -f $p,$UserProfiles.count) -Step $p -MaxStep $UserProfiles.count}
+                If($Message){Show-ProgressStatus -Message $Message -SubMessage ("for user profile ({0} of {1})" -f $p,$ProfileList.count) -Step $p -MaxStep $ProfileList.count}
 
                 #loadhive if not mounted
                 If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
@@ -865,11 +866,8 @@ Function Get-InstalledApplication {
 ##*===========================================================================
 ##* VARIABLES
 ##*===========================================================================
-## Variables: Script Name and Script Paths
-## Instead fo using $PSScriptRoot variable, use the custom InvocationInfo for ISE runs
-If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostInvocation } Else { $InvocationInfo = $MyInvocation }
-#Since running script within Powershell ISE doesn't have a $scriptpath...hardcode it
-If(Test-IsISE){$scriptPath = "C:\Development\GitHub\OS-Configs\AppOptimizeAndConfig.ps1"}Else{$scriptPath = $InvocationInfo.MyCommand.Path}
+# Use function to get paths because Powershell ISE and other editors have differnt results
+$scriptPath = Get-ScriptPath
 [string]$scriptDirectory = Split-Path $scriptPath -Parent
 [string]$scriptName = Split-Path $scriptPath -Leaf
 [string]$scriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($scriptName)
