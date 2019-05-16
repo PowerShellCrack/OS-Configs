@@ -1,6 +1,9 @@
 # Windows 10 Optimization And Configurations
  - Applies all types of settings for Windows 10. Script variables can be set either internal (standalone) or using MDT/SCCM Task sequence custom properties. Ultimately MDT/SCCM properties will overwrite internal variable if set. 
 
+## Project: 
+ - This is part of my <b>MDT automation Project</b>
+ 
 ## Prerequisites
  - Group Policy Support - download LGPO (https://www.microsoft.com/en-us/download/confirmation.aspx?id=55319) and place it ins the Tools folder
  - CredGuard Support - download creadguard script by Microsoft (https://www.microsoft.com/en-us/download/confirmation.aspx?id=53337)
