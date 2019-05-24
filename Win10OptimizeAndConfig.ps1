@@ -68,6 +68,7 @@
         CFG_DisableWindowsUpgrades
         CFG_ApplyPrivacyMitigations
         CFG_RemoveRebootOnLockScreen
+        CFG_RemoveUnusedPrinters
 
         '//System Adv Settings
         CFG_DisableSmartCardLogon
@@ -97,7 +98,6 @@
         CFG_RemoveActiveSetupComponents
         CFG_PreCompileAssemblies
         CFG_OptimizeNetwork
-        CFG_RemoveUnusedPrinters
 
     .NOTES
         Author:         Richard Tracy
@@ -3271,10 +3271,11 @@ Else{$stepCounter++}
 
 If($RemoveUnusedPrinters)
 {
-    $filter = "Microsoft XPS Document Writer|Microsoft Print to PDF"
+    Show-ProgressStatus -Message ("Removing Unused Local Printers...") -Step ($stepCounter++) -MaxStep $script:Maxsteps
     
-    Get-Printer | Where{$_.Name -notmatch $filter} | Remove-Printer -PassThru -Confirm:$false
-
+    $filter = "Microsoft XPS Document Writer|Microsoft Print to PDF|OneNote" #Send To OneNote 16
+    Get-Printer | Where{($_.Name -notmatch $filter) -and ($_.Type -eq 'Local') } | Remove-Printer -PassThru -Confirm:$false
 }
+Else{$stepCounter++}
 
 Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps
