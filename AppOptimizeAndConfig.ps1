@@ -23,17 +23,16 @@
         CFG_EnableLyncStartup
         CFG_RemoveAppxPackages
         CFG_RemoveFODPackages
-        
-    
+
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/15/2019
-        Version:        1.1.1
+        Last Update:    05/24/2019
+        Version:        1.1.2
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
-        Properties=CFG_DisableAppScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_DisableOfficeAnimation,CFG_EnableIESoftwareRender,CFG_EnableLyncStartup,CFG_RemoveAppxPackages,CFG_RemoveFODPackages
+        Properties=CFG_DisableAppScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_DisableOfficeAnimation,CFG_EnableIESoftwareRender,CFG_EnableLyncStartup,CFG_RemoveAppxPackages,CFG_RemoveFODPackages,CFG_RemoveUnusedPrinters
         
         #Then add each option to a priority specifically for your use, like:
         [Default]
@@ -50,6 +49,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOG
+        1.1.2 - May 24, 2019 - Removed IE customized settings
         1.1.1 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings  
         1.1.0 - May 10, 2019 - added appx removal Feature on Demand removal, reorganized controls in categories
         1.0.4 - May 09, 2019 - added Office detection
@@ -930,7 +930,6 @@ Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 [boolean]$RemoveAppxPackages = $false
 [boolean]$RemoveFODPackages = $false
 
-
 # When running in Tasksequence and configureation exists, use that instead
 If(Get-SMSTSENV){
     # Global Settings
@@ -981,7 +980,6 @@ If($OfficeInstalled){
 
 If($EnableIESoftwareRender){
     Set-UserSetting -Message "Enabling Software Rendering For IE" -Path "SOFTWARE\Microsoft\Internet Explorer\Main" -Name 'UseSWRender' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Wizard For IE" -Path "SOFTWARE\Microsoft\Internet Explorer\Main" -Name 'DisableFirstRunCustomize' -Type DWord -Value 3 -Force
 }
 Else{$stepCounter++}
 
@@ -1141,6 +1139,5 @@ If($RemoveFODPackages)
 
 }
 Else{$stepCounter++}
-
 
 Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps

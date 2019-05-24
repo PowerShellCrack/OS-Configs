@@ -97,17 +97,18 @@
         CFG_RemoveActiveSetupComponents
         CFG_PreCompileAssemblies
         CFG_OptimizeNetwork
+        CFG_RemoveUnusedPrinters
 
     .NOTES
         Author:         Richard Tracy
-        Last Update:    05/15/2019
-        Version:        3.1.5
+        Last Update:    05/24/2019
+        Version:        3.1.6
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
 
-        Properties=CFG_DisableConfigScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_EnableVisualPerformance,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableDarkTheme,CFG_EnableTaskbarAutoColor,CFG_DisableFontSmoothing,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableOfficeOneNote,CFG_DisableOneDrive,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,CFG_DisableStoreOnTaskbar,CFG_DisableActivityHistory,CFG_SetSmartScreenFilter,CFG_EnableNumlockStartup,CFG_DisableAppSuggestions,,#// System Settings,CFG_InstallPSModules,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_ApplyCustomHost,HostPath,CFG_EnableSecureLogonCAD,CFG_DisableAllNotifications,CFG_EnableVerboseMsg,CFG_DisableAutoRun,CFG_PreferIPv4OverIPv6,CFG_EnableAppsRunAsAdmin,CFG_HideDrives,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWUP2P,CFG_DisablePreviewBuild,CFG_DisableDriverUpdates,CFG_DisableWindowsUpgrades,CFG_ApplyPrivacyMitigations,CFG_RemoveRebootOnLockScreen,CFG_DisableSmartCardLogon,CFG_ForceStrictSmartCardLogon,CFG_EnableFIPS,CFG_EnableCredGuard,CFG_DisableUAC,CFG_EnableStrictUAC,CFG_EnableRDP,CFG_EnableWinRM,CFG_EnableRemoteRegistry,CFG_EnableUEV,CFG_EnableAppV,CFG_EnablePSLogging,CFG_EnableLinuxSubSystem,CFG_DisableAdminShares,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableIndexing,CFG_RemoveActiveSetupComponents,CFG_PreCompileAssemblies,CFG_OptimizeNetwork
+        Properties=CFG_DisableConfigScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_EnableVisualPerformance,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableDarkTheme,CFG_EnableTaskbarAutoColor,CFG_DisableFontSmoothing,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableOfficeOneNote,CFG_DisableOneDrive,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,CFG_DisableStoreOnTaskbar,CFG_DisableActivityHistory,CFG_SetSmartScreenFilter,CFG_EnableNumlockStartup,CFG_DisableAppSuggestions,,#// System Settings,CFG_InstallPSModules,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_ApplyCustomHost,HostPath,CFG_EnableSecureLogonCAD,CFG_DisableAllNotifications,CFG_EnableVerboseMsg,CFG_DisableAutoRun,CFG_PreferIPv4OverIPv6,CFG_EnableAppsRunAsAdmin,CFG_HideDrives,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWUP2P,CFG_DisablePreviewBuild,CFG_DisableDriverUpdates,CFG_DisableWindowsUpgrades,CFG_ApplyPrivacyMitigations,CFG_RemoveRebootOnLockScreen,CFG_DisableSmartCardLogon,CFG_ForceStrictSmartCardLogon,CFG_EnableFIPS,CFG_EnableCredGuard,CFG_DisableUAC,CFG_EnableStrictUAC,CFG_EnableRDP,CFG_EnableWinRM,CFG_EnableRemoteRegistry,CFG_EnableUEV,CFG_EnableAppV,CFG_EnablePSLogging,CFG_EnableLinuxSubSystem,CFG_DisableAdminShares,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableIndexing,CFG_RemoveActiveSetupComponents,CFG_PreCompileAssemblies,CFG_OptimizeNetwork,CFG_RemoveUnusedPrinters
 
         #Then add each option to a priority specifically for your use, like:
         [Default]
@@ -124,6 +125,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
+        3.1.6 - May 24, 2019 - Added Unused Printer removal, fixed DisableIEFirstRunWizard section
         3.1.5 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings 
         3.1.4 - May 10, 2019 - added strict smart card login scenario; reorganized controls in categories
                                 fixed PS module import 
@@ -1118,6 +1120,7 @@ Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 [boolean]$DisableWindowsUpgrades = $false
 [boolean]$ApplyPrivacyMitigations = $false
 [boolean]$RemoveRebootOnLockScreen = $false
+[boolean]$RemoveUnusedPrinters = $false
 # System Adv Settings
 [boolean]$DisableSmartCardLogon = $false
 [boolean]$ForceStrictSmartCardLogon = $false
@@ -1206,6 +1209,7 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_DisableWindowsUpgrades){[boolean]$DisableWindowsUpgrades = [boolean]::Parse($tsenv.Value("CFG_DisableWindowsUpgrades"))}
     If($tsenv:CFG_ApplyPrivacyMitigations){[boolean]$ApplyPrivacyMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyPrivacyMitigations"))}
     If($tsenv:CFG_RemoveRebootOnLockScreen){[boolean]$RemoveRebootOnLockScreen = [boolean]::Parse($tsenv.Value("CFG_RemoveRebootOnLockScreen"))}
+    If($tsenv:CFG_RemoveUnusedPrinters){[boolean]$RemoveUnusedPrinters = [boolean]::Parse($tsenv.Value("CFG_RemoveUnusedPrinters"))}
     # System Adv Settings
     If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
     If($tsenv:CFG_ForceStrictSmartCardLogon){[boolean]$ForceStrictSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_ForceStrictSmartCardLogon"))}
@@ -1675,12 +1679,19 @@ If($DisableAllNotifications)
 Else{$stepCounter++}
 
 
-If ($DisabledIEFirstRunWizard)
+If ($DisableIEFirstRunWizard)
 {
 	# Disable IE First Run Wizard
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:40] :: "}
     Show-ProgressStatus -Message ("{0}Disabling IE First Run Wizard" -f $prefixmsg) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Main' -Name 'DisableFirstRunCustomize' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main' -Name 'RunOnceHasShown' -Type DWord -Value '1' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main' -Name 'RunOnceComplete' -Type DWord -Value '1' -Force
+
+    Set-UserSetting -Message ("{0}Disabling IE First Run Wizard" -f $prefixmsg) -Path "SOFTWARE\Policies\Microsoft\Internet Explorer\Main" -Name 'DisableFirstRunCustomize' -Type DWord -Value '1' -Force -TryLGPO:$true
+    Set-UserSetting -Message "Setting Show Run in IE" -Path "SOFTWARE\Microsoft\Internet Explorer\Main" -Name 'RunOnceHasShown' -Type DWord -Value '1' -Force
+    Set-UserSetting -Message "Setting Run Once Comleted in IE" -Path "SOFTWARE\Microsoft\Internet Explorer\Main" -Name 'RunOnceComplete' -Type DWord -Value '1' -Force
+
 }
 Else{$stepCounter++}
 
@@ -3257,5 +3268,13 @@ If ($PreCompileAssemblies -or $OptimizeForVDI)
 }
 Else{$stepCounter++}
 
+
+If($RemoveUnusedPrinters)
+{
+    $filter = "Microsoft XPS Document Writer|Microsoft Print to PDF"
+    
+    Get-Printer | Where{$_.Name -notmatch $filter} | Remove-Printer -PassThru -Confirm:$false
+
+}
 
 Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps
