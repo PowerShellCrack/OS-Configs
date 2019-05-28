@@ -146,7 +146,13 @@ Function Get-SMSTSENV{
         }
     }
     End{
-        If($ReturnLogPath){return $LogPath}
+        #If output log path if specified , otherwise output ts environment
+        If($ReturnLogPath){
+            return $LogPath
+        }
+        Else{
+            return $Script:tsenv
+        }
     }
 }
 
@@ -914,11 +920,6 @@ Else{
 $Global:LogFilePath = Join-Path (Get-SMSTSENV -ReturnLogPath -NoWarning) -ChildPath $FileName
 Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 
-# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
-If($DisableScript){
-    Write-LogEntry "Script is disabled!"
-    Exit 0
-}
 
 ##*===========================================================================
 ##* DEFAULTS: Configurations are here (change values if needed)
@@ -952,7 +953,11 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_RemoveFODPackages){[boolean]$RemoveFODPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveFODPackages"))}
 }
 
-
+# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
+If($DisableScript){
+    Write-LogEntry "Script is disabled!"
+    Exit 0
+}
 
 #check if LGPO file exists in Tools directory or Specified LGPOPath
 $FindLGPO = Get-ChildItem $Global:LGPOPath -Filter LGPO.exe -ErrorAction SilentlyContinue
