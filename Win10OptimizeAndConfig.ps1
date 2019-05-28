@@ -102,7 +102,7 @@
     .NOTES
         Author:         Richard Tracy
         Last Update:    05/24/2019
-        Version:        3.1.6
+        Version:        3.1.7
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
@@ -125,6 +125,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
+        3.1.7 - May 28, 2019 - fixed Get-SMSTSENV log path
         3.1.6 - May 24, 2019 - Added Unused Printer removal, fixed DisableIEFirstRunWizard section
         3.1.5 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings 
         3.1.4 - May 10, 2019 - added strict smart card login scenario; reorganized controls in categories
@@ -199,7 +200,10 @@ Function Get-ScriptPath {
 
 
 Function Get-SMSTSENV{
-    param([switch]$LogPath,[switch]$NoWarning)
+    param(
+        [switch]$ReturnLogPath,
+        [switch]$NoWarning
+    )
     
     Begin{
         ## Get the name of this function
@@ -209,8 +213,6 @@ Function Get-SMSTSENV{
         try{
             # Create an object to access the task sequence environment
             $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
-            #test if variables exist
-            $tsenv.GetVariables()  #| % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
         }
         catch{
             If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
@@ -221,27 +223,32 @@ Function Get-SMSTSENV{
         }
         Finally{
             #set global Logpath
-            if ($tsenv){
+            if ($Script:tsenv){
                 #grab the progress UI
                 $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
 
-                # Query the environment to get an existing variable
-                # Set a variable for the task sequence log path
-                #$UseLogPath = $tsenv.Value("LogPath")
-                $UseLogPath = $tsenv.Value("_SMSTSLogPath")
-
                 # Convert all of the variables currently in the environment to PowerShell variables
                 $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+                
+                # Query the environment to get an existing variable
+                # Set a variable for the task sequence log path
+                
+                #Something like: C:\MININT\SMSOSD\OSDLOGS
+                #[string]$LogPath = $tsenv.Value("LogPath")
+                #Somthing like C:\WINDOWS\CCM\Logs\SMSTSLog
+                [string]$LogPath = $tsenv.Value("_SMSTSLogPath")
+                
             }
             Else{
-                $UseLogPath = $env:Temp
+                [string]$LogPath = $env:Temp
             }
         }
     }
     End{
-        If($LogPath){return $UseLogPath}
+        If($ReturnLogPath){return $LogPath}
     }
 }
+
 
 Function Format-ElapsedTime($ts) {
     $elapsedTime = ""
@@ -1034,14 +1041,6 @@ $ModulesPath = Join-Path -Path $scriptDirectory -ChildPath 'PSModules'
 $BinPath = Join-Path -Path $scriptDirectory -ChildPath 'Bin'
 $FilesPath = Join-Path -Path $scriptDirectory -ChildPath 'Files'
 
-#if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
-If($tsenv){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
-If($tsenv -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
-
-#grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
-#set counter to one
-$stepCounter = 1
 
 #check if running in verbose mode
 $Global:Verbose = $false
@@ -1057,9 +1056,14 @@ Else{
 #build log name
 [string]$FileName = $scriptBaseName +'.log'
 #build global log fullpath
-$Global:LogFilePath = Join-Path (Get-SMSTSENV -LogPath -NoWarning) -ChildPath $FileName
+$Global:LogFilePath = Join-Path (Get-SMSTSENV -ReturnLogPath -NoWarning) -ChildPath $FileName
 Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 
+# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
+If($DisableScript){
+    Write-LogEntry "Script is disabled!"
+    Exit 0
+}
 ##*===========================================================================
 ##* DEFAULTS: Configurations are here (change values if needed)
 ##*===========================================================================
@@ -1240,12 +1244,6 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_OptimizeNetwork){[boolean]$OptimizeNetwork = [boolean]::Parse($tsenv.Value("CFG_OptimizeNetwork"))}
 }
 
-# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
-If($DisableScript){
-    Write-LogEntry "Script is disabled!"
-    Exit 0
-}
-
 #check if LGPO file exists in Tools directory or Specified LGPOPath
 $FindLGPO = Get-ChildItem $Global:LGPOPath -Filter LGPO.exe -ErrorAction SilentlyContinue
 If($FindLGPO){
@@ -1261,6 +1259,14 @@ $OneNotePathx64 = Get-ChildItem "$env:ProgramFiles" -Recurse -Filter "ONENOTE.EX
 If($OneNotePathx86){$OneNotePath = $OneNotePathx86}
 If($OneNotePathx64){$OneNotePath = $OneNotePathx64}
 
+#if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
+If(Get-SMSTSENV -NoWarning){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
+If((Get-SMSTSENV -NoWarning) -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
+
+#grab all Show-ProgressStatus commands in script and count them
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+#set counter to one
+$stepCounter = 1
 ##*===========================================================================
 ##* MAIN
 ##*===========================================================================

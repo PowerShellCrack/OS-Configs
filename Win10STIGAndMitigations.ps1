@@ -24,8 +24,8 @@
 
     .NOTES
         Author:         Richard Tracy
-        Last Update:    05/10/2019
-        Version:        2.1.1
+        Last Update:    05/28/2019
+        Version:        2.1.3
            
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
@@ -40,6 +40,7 @@
         #Add script to task sequence
 
     .LOGS
+        2.1.3 - May 28, 2019 - fixed Get-SMSTSENV log path
         2.1.2 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings   
         2.1.1 - May 10, 2019 - reorganized controls in categories
         2.1.0 - Apr 17, 2019 - added Set-UserSetting function
@@ -91,8 +92,12 @@ Function Get-ScriptPath {
     }
 }
 
+
 Function Get-SMSTSENV{
-    param([switch]$LogPath,[switch]$NoWarning)
+    param(
+        [switch]$ReturnLogPath,
+        [switch]$NoWarning
+    )
     
     Begin{
         ## Get the name of this function
@@ -102,8 +107,6 @@ Function Get-SMSTSENV{
         try{
             # Create an object to access the task sequence environment
             $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
-            #test if variables exist
-            $tsenv.GetVariables()  #| % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
         }
         catch{
             If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
@@ -114,27 +117,32 @@ Function Get-SMSTSENV{
         }
         Finally{
             #set global Logpath
-            if ($tsenv){
+            if ($Script:tsenv){
                 #grab the progress UI
                 $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
 
-                # Query the environment to get an existing variable
-                # Set a variable for the task sequence log path
-                #$UseLogPath = $tsenv.Value("LogPath")
-                $UseLogPath = $tsenv.Value("_SMSTSLogPath")
-
                 # Convert all of the variables currently in the environment to PowerShell variables
                 $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+                
+                # Query the environment to get an existing variable
+                # Set a variable for the task sequence log path
+                
+                #Something like: C:\MININT\SMSOSD\OSDLOGS
+                #[string]$LogPath = $tsenv.Value("LogPath")
+                #Somthing like C:\WINDOWS\CCM\Logs\SMSTSLog
+                [string]$LogPath = $tsenv.Value("_SMSTSLogPath")
+                
             }
             Else{
-                $UseLogPath = $env:Temp
+                [string]$LogPath = $env:Temp
             }
         }
     }
     End{
-        If($LogPath){return $UseLogPath}
+        If($ReturnLogPath){return $LogPath}
     }
 }
+
 Function Format-ElapsedTime($ts) {
     $elapsedTime = ""
     if ( $ts.Minutes -gt 0 ){$elapsedTime = [string]::Format( "{0:00} min. {1:00}.{2:00} sec.", $ts.Minutes, $ts.Seconds, $ts.Milliseconds / 10 );}
@@ -727,15 +735,6 @@ $scriptPath = Get-ScriptPath
 $ToolsPath = Join-Path $scriptDirectory -ChildPath 'Tools'
 $AdditionalScriptsPath = Join-Path $scriptDirectory -ChildPath 'Scripts'
 
-#if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
-If($tsenv){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
-If($tsenv -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
-
-#grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
-#set counter to one
-$stepCounter = 1
-
 #check if running in verbose mode
 $Global:Verbose = $false
 If($PSBoundParameters.ContainsKey('Debug') -or $PSBoundParameters.ContainsKey('Verbose')){
@@ -750,9 +749,14 @@ Else{
 #build log name
 [string]$FileName = $scriptBaseName +'.log'
 #build global log fullpath
-$Global:LogFilePath = Join-Path (Get-SMSTSENV -LogPath -NoWarning) -ChildPath $FileName
+[string]$Global:LogFilePath = Join-Path (Get-SMSTSENV -ReturnLogPath -NoWarning) -ChildPath $FileName
 Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 
+# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
+If($DisableScript){
+    Write-LogEntry "Script is disabled!" -Outhost
+    Exit 0
+}
 ##*===========================================================================
 ##* DEFAULTS: Configurations are here (change values if needed)
 ##*===========================================================================
@@ -779,11 +783,6 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_ApplyEMETMitigations){[boolean]$ApplyEMETMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyEMETMitigations"))}
 }
 
-# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
-If($DisableScript){
-    Write-LogEntry "Script is disabled!" -Outhost
-    Exit 0
-}
 
 #$VerbosePreference = 'SilentlyContinue'
 $VerbosePreference = 'Continue'
@@ -796,6 +795,16 @@ If($FindLGPO){
 Else{
     $UseLGPO = $false
 }
+
+
+#if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
+If(Get-SMSTSENV -NoWarning){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
+If((Get-SMSTSENV -NoWarning) -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
+
+#grab all Show-ProgressStatus commands in script and count them
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+#set counter to one
+$stepCounter = 1
 
 ##*===========================================================================
 ##* MAIN

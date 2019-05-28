@@ -26,8 +26,8 @@
 
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/24/2019
-        Version:        1.1.2
+        Last Update:    05/28/2019
+        Version:        1.1.32
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
@@ -49,6 +49,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOG
+        1.1.3 - May 28, 2019 - fixed Get-SMSTSENV log path
         1.1.2 - May 24, 2019 - Removed IE customized settings
         1.1.1 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings  
         1.1.0 - May 10, 2019 - added appx removal Feature on Demand removal, reorganized controls in categories
@@ -98,8 +99,12 @@ Function Get-ScriptPath {
     }
 }
 
+
 Function Get-SMSTSENV{
-    param([switch]$LogPath,[switch]$NoWarning)
+    param(
+        [switch]$ReturnLogPath,
+        [switch]$NoWarning
+    )
     
     Begin{
         ## Get the name of this function
@@ -109,8 +114,6 @@ Function Get-SMSTSENV{
         try{
             # Create an object to access the task sequence environment
             $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
-            #test if variables exist
-            $tsenv.GetVariables()  #| % { Write-Output "$ScriptName - $_ = $($tsenv.Value($_))" }
         }
         catch{
             If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
@@ -121,27 +124,32 @@ Function Get-SMSTSENV{
         }
         Finally{
             #set global Logpath
-            if ($tsenv){
+            if ($Script:tsenv){
                 #grab the progress UI
                 $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
 
-                # Query the environment to get an existing variable
-                # Set a variable for the task sequence log path
-                #$UseLogPath = $tsenv.Value("LogPath")
-                $UseLogPath = $tsenv.Value("_SMSTSLogPath")
-
                 # Convert all of the variables currently in the environment to PowerShell variables
                 $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+                
+                # Query the environment to get an existing variable
+                # Set a variable for the task sequence log path
+                
+                #Something like: C:\MININT\SMSOSD\OSDLOGS
+                #[string]$LogPath = $tsenv.Value("LogPath")
+                #Somthing like C:\WINDOWS\CCM\Logs\SMSTSLog
+                [string]$LogPath = $tsenv.Value("_SMSTSLogPath")
+                
             }
             Else{
-                $UseLogPath = $env:Temp
+                [string]$LogPath = $env:Temp
             }
         }
     }
     End{
-        If($LogPath){return $UseLogPath}
+        If($ReturnLogPath){return $LogPath}
     }
 }
+
 
 Function Format-ElapsedTime($ts) {
     $elapsedTime = ""
@@ -888,14 +896,6 @@ $scriptPath = Get-ScriptPath
 #Create Paths
 $ToolsPath = Join-Path $scriptDirectory -ChildPath 'Tools'
 
-#if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
-If($tsenv){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
-If($tsenv -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
-
-#grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
-#set counter to one
-$stepCounter = 1
 
 #check if running in verbose mode
 $Global:Verbose = $false
@@ -911,8 +911,14 @@ Else{
 #build log name
 [string]$FileName = $scriptBaseName +'.log'
 #build global log fullpath
-$Global:LogFilePath = Join-Path (Get-SMSTSENV -LogPath -NoWarning) -ChildPath $FileName
+$Global:LogFilePath = Join-Path (Get-SMSTSENV -ReturnLogPath -NoWarning) -ChildPath $FileName
 Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
+
+# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
+If($DisableScript){
+    Write-LogEntry "Script is disabled!"
+    Exit 0
+}
 
 ##*===========================================================================
 ##* DEFAULTS: Configurations are here (change values if needed)
@@ -946,11 +952,7 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_RemoveFODPackages){[boolean]$RemoveFODPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveFODPackages"))}
 }
 
-# Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
-If($DisableScript){
-    Write-LogEntry "Script is disabled!"
-    Exit 0
-}
+
 
 #check if LGPO file exists in Tools directory or Specified LGPOPath
 $FindLGPO = Get-ChildItem $Global:LGPOPath -Filter LGPO.exe -ErrorAction SilentlyContinue
@@ -974,6 +976,14 @@ If($OfficeInstalled){
     $OfficeFolder = 'Office' + [string]([version]$OfficeInstalled.DisplayVersion).Major
 }
 
+#if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
+If(Get-SMSTSENV -NoWarning){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
+If((Get-SMSTSENV -NoWarning) -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
+
+#grab all Show-ProgressStatus commands in script and count them
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+#set counter to one
+$stepCounter = 1
 ##*===========================================================================
 ##* MAIN
 ##*===========================================================================
@@ -1043,7 +1053,7 @@ If($RemoveAppxPackages)
         # If application name not in appx package white list, remove AppxPackage and AppxProvisioningPackage
         if (($App.Name -in $WhiteListedApps)) {
             $status = "Skipping excluded application package: $($App.Name)"
-            Write-LogEntry -Value $status -Outhost
+            Write-LogEntry -Message $status -Outhost
         }
         else {
             # Gather package names
@@ -1057,30 +1067,30 @@ If($RemoveAppxPackages)
                 
                 try {
                     Remove-AppxPackage -Package $AppPackageFullName -ErrorAction Stop | Out-Null
-                    Write-LogEntry -Value "Successfully removed application package: $($App.Name)" -Outhost
+                    Write-LogEntry -Message "Successfully removed application package: $($App.Name)" -Outhost
                     $c++
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Value "Failed removing AppxPackage: $($_.Exception.Message)" -Severity 3 -Outhost
+                    Write-LogEntry -Message "Failed removing AppxPackage: $($_.Exception.Message)" -Severity 3 -Outhost
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxPackage for app: $($App.Name)" -Outhost
+                Write-LogEntry -Message "Unable to locate AppxPackage for app: $($App.Name)" -Outhost
             }
 
             # Attempt to remove AppxProvisioningPackage
             if ($AppProvisioningPackageName -ne $null) {
-                Write-LogEntry -Value "Removing application provisioning package: $($AppProvisioningPackageName)"
+                Write-LogEntry -Message "Removing application provisioning package: $($AppProvisioningPackageName)"
                 try {
                     Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
-                    Write-LogEntry -Value "Successfully removed application provisioning package: $AppProvisioningPackageName" -Outhost
+                    Write-LogEntry -Message "Successfully removed application provisioning package: $AppProvisioningPackageName" -Outhost
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Value "Failed removing AppxProvisioningPackage: $($_.Exception.Message)" -Severity 3 -Outhost
+                    Write-LogEntry -Message "Failed removing AppxProvisioningPackage: $($_.Exception.Message)" -Severity 3 -Outhost
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxProvisioningPackage for app: $($App.Name)" -Outhost
+                Write-LogEntry -Message "Unable to locate AppxProvisioningPackage for app: $($App.Name)" -Outhost
             }
 
         }
@@ -1088,7 +1098,7 @@ If($RemoveAppxPackages)
         $p++
     }
 
-    Write-LogEntry -Value ("Removed {0} built-in AppxPackage and AppxProvisioningPackage" -f $c) -Outhost
+    Write-LogEntry -Message ("Removed {0} built-in AppxPackage and AppxProvisioningPackage" -f $c) -Outhost
 }
 Else{$stepCounter++}
 
