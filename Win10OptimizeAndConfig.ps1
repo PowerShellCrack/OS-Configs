@@ -101,8 +101,8 @@
 
     .NOTES
         Author:         Richard Tracy
-        Last Update:    05/24/2019
-        Version:        3.1.7
+        Last Update:    05/29/2019
+        Version:        3.1.8
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
@@ -125,6 +125,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
+        3.1.8 - May 29, 2019 - fixed UnusedFeature issue  
         3.1.7 - May 28, 2019 - fixed Get-SMSTSENV log path
         3.1.6 - May 24, 2019 - Added Unused Printer removal, fixed DisableIEFirstRunWizard section
         3.1.5 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings 
@@ -1797,7 +1798,8 @@ If ($DisabledUnusedFeatures)
         $features = $features + @{
             "WindowsMediaPlayer"="67:Windows Media Player"
             "WCF-Services45"="69:ASP.Net 4.5 WCF"
-            "Xps-Foundation-Xps-Viewer"="70:Xps Foundation"
+            "Xps-Foundation-Xps-Viewer"="70:Xps Viewer"
+            "Printing-XPSServices-Features"="Xps Services"
             "WorkFolders-Client"="Work folders Client"
         }
     }
@@ -1809,7 +1811,7 @@ If ($DisabledUnusedFeatures)
         If($ColonSplit){
             $OSODID = ($key.Value).split(":")[0]
             $FeatName = ($key.Value).split(":")[1]
-            If($OptimizeForVDI){$prefixmsg = ("VDI Optimizations [OSOT ID:{1}] ::" -f $OSODID)}
+            If($OptimizeForVDI){$prefixmsg = ("VDI Optimizations [OSOT ID:{0}] ::" -f $OSODID)}
         }
         Else{
             $FeatName = $key.Value
@@ -1819,16 +1821,19 @@ If ($DisabledUnusedFeatures)
         Show-ProgressStatus -Message "Disabling Unused Features" -SubMessage ("{2} ({0} of {1})" -f $i,$features.count,$FeatName) -Step $i -MaxStep $features.count
 
         Try{
-            Write-LogEntry ("{0}UnusedFeatures :: Disabling {1} Feature..." -f $prefixmsg,$FeatName)
-            Disable-WindowsOptionalFeature -FeatureName $key.Key -Online -NoRestart -ErrorAction Stop | Out-Null
+            Write-LogEntry ("{0}Unused Features :: Disabling {1} Feature..." -f $prefixmsg,$FeatName)
+            $result = Get-WindowsOptionalFeature -Online -FeatureName $key.key | Disable-WindowsOptionalFeature -Online -NoRestart -ErrorAction Stop -WarningAction SilentlyContinue
+            if ($results.RestartNeeded -eq $true) {
+                Write-LogEntry ("Reboot is required for disabling the [{0}] Feature" -f $FeatName)
+            }
         }
         Catch [System.Management.Automation.ActionPreferenceStopException]{
             Write-LogEntry ("Unable to Remove {0} Feature: {1}" -f $FeatName,$_) -Severity 3
         }
 
+
         Start-Sleep -Seconds 10
-        $i++
-            
+        $i++ 
     }
     
     Write-LogEntry "Removing Default Fax Printer..."
@@ -2935,7 +2940,7 @@ Else{$stepCounter++}
 
 If($EnableVisualPerformance)
 {
-    Additional Performance changes
+    #Additional Performance changes
     
     # thanks to camxct
     #https://github.com/camxct/Win10-Initial-Setup-Script/blob/master/Win10.psm1
@@ -3291,4 +3296,4 @@ If($RemoveUnusedPrinters)
 }
 Else{$stepCounter++}
 
-Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps
+Show-ProgressStatus -Message 'Completed Windows 10 Optimizations and Configuration' -Step $script:maxSteps -MaxStep $script:maxSteps

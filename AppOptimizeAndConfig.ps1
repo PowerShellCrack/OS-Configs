@@ -26,8 +26,8 @@
 
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/28/2019
-        Version:        1.1.32
+        Last Update:    05/29/2019
+        Version:        1.1.4
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
@@ -49,6 +49,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOG
+        1.1.4 - May 28, 2019 - fixed FOD issue and messages    
         1.1.3 - May 28, 2019 - fixed Get-SMSTSENV log path
         1.1.2 - May 24, 2019 - Removed IE customized settings
         1.1.1 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings  
@@ -66,7 +67,7 @@ Function Test-IsISE {
     # try...catch accounts for:
     # Set-StrictMode -Version latest
     try {    
-        return $psISE -ne $null;
+        return ($null -ne $psISE);
     }
     catch {
         return $false;
@@ -74,8 +75,6 @@ Function Test-IsISE {
 }
 
 Function Get-ScriptPath {
-    If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostInvocation } Else { $InvocationInfo = $MyInvocation }
-
     # Makes debugging from ISE easier.
     if ($PSScriptRoot -eq "")
     {
@@ -129,7 +128,7 @@ Function Get-SMSTSENV{
                 $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
 
                 # Convert all of the variables currently in the environment to PowerShell variables
-                $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+                $tsenv.GetVariables() | ForEach-Object { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
                 
                 # Query the environment to get an existing variable
                 # Set a variable for the task sequence log path
@@ -169,7 +168,6 @@ Function Format-ElapsedTime($ts) {
 Function Format-DatePrefix{
     [string]$LogTime = (Get-Date -Format 'HH:mm:ss.fff').ToString()
 	[string]$LogDate = (Get-Date -Format 'MM-dd-yyyy').ToString()
-    $CombinedDateTime = "$LogDate $LogTime"
     return ($LogDate + " " + $LogTime)
 }
 
@@ -191,53 +189,56 @@ Function Write-LogEntry{
         [parameter(Mandatory=$false)]
         [switch]$Outhost
     )
-    ## Get the name of this function
-    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
-
-    [string]$LogTime = (Get-Date -Format 'HH:mm:ss.fff').ToString()
-	[string]$LogDate = (Get-Date -Format 'MM-dd-yyyy').ToString()
-	[int32]$script:LogTimeZoneBias = [timezone]::CurrentTimeZone.GetUtcOffset([datetime]::Now).TotalMinutes
-	[string]$LogTimePlusBias = $LogTime + $script:LogTimeZoneBias
-    #  Get the file name of the source script
-
-    Try {
-	    If ($script:MyInvocation.Value.ScriptName) {
-		    [string]$ScriptSource = Split-Path -Path $script:MyInvocation.Value.ScriptName -Leaf -ErrorAction 'Stop'
-	    }
-	    Else {
-		    [string]$ScriptSource = Split-Path -Path $script:MyInvocation.MyCommand.Definition -Leaf -ErrorAction 'Stop'
-	    }
+    Begin{
+        [string]$LogTime = (Get-Date -Format 'HH:mm:ss.fff').ToString()
+        [string]$LogDate = (Get-Date -Format 'MM-dd-yyyy').ToString()
+        [int32]$script:LogTimeZoneBias = [timezone]::CurrentTimeZone.GetUtcOffset([datetime]::Now).TotalMinutes
+        [string]$LogTimePlusBias = $LogTime + $script:LogTimeZoneBias
+        
     }
-    Catch {
-	    $ScriptSource = ''
-    }
-    
-    
-    If(!$Severity){$Severity = 1}
-    $LogFormat = "<![LOG[$Message]LOG]!>" + "<time=`"$LogTimePlusBias`" " + "date=`"$LogDate`" " + "component=`"$ScriptSource`" " + "context=`"$([Security.Principal.WindowsIdentity]::GetCurrent().Name)`" " + "type=`"$Severity`" " + "thread=`"$PID`" " + "file=`"$ScriptSource`">"
-    
-    # Add value to log file
-    try {
-        Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
-    }
-    catch {
-        Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
-    }
-    If($Outhost){
-        If($Source){
-            $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$Source,$Message)
+    Process{
+        # Get the file name of the source script
+        Try {
+            If ($script:MyInvocation.Value.ScriptName) {
+                [string]$ScriptSource = Split-Path -Path $script:MyInvocation.Value.ScriptName -Leaf -ErrorAction 'Stop'
+            }
+            Else {
+                [string]$ScriptSource = Split-Path -Path $script:MyInvocation.MyCommand.Definition -Leaf -ErrorAction 'Stop'
+            }
         }
-        Else{
-            $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$ScriptSource,$Message)
+        Catch {
+            $ScriptSource = ''
         }
+        
+        
+        If(!$Severity){$Severity = 1}
+        $LogFormat = "<![LOG[$Message]LOG]!>" + "<time=`"$LogTimePlusBias`" " + "date=`"$LogDate`" " + "component=`"$ScriptSource`" " + "context=`"$([Security.Principal.WindowsIdentity]::GetCurrent().Name)`" " + "type=`"$Severity`" " + "thread=`"$PID`" " + "file=`"$ScriptSource`">"
+        
+        # Add value to log file
+        try {
+            Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
+        }
+        catch {
+            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
+        }
+    }
+    End{
+        If($Outhost){
+            If($Source){
+                $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$Source,$Message)
+            }
+            Else{
+                $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$ScriptSource,$Message)
+            }
 
-        Switch($Severity){
-            0       {Write-Host $OutputMsg -ForegroundColor Green}
-            1       {Write-Host $OutputMsg -ForegroundColor Gray}
-            2       {Write-Warning $OutputMsg}
-            3       {Write-Host $OutputMsg -ForegroundColor Red}
-            4       {If($Global:Verbose){Write-Verbose $OutputMsg}}
-            default {Write-Host $OutputMsg}
+            Switch($Severity){
+                0       {Write-Host $OutputMsg -ForegroundColor Green}
+                1       {Write-Host $OutputMsg -ForegroundColor Gray}
+                2       {Write-Warning $OutputMsg}
+                3       {Write-Host $OutputMsg -ForegroundColor Red}
+                4       {If($Global:Verbose){Write-Verbose $OutputMsg}}
+                default {Write-Host $OutputMsg}
+            }
         }
     }
 }
@@ -520,50 +521,49 @@ Function Set-SystemSetting {
 Function Set-UserSetting {
     [CmdletBinding()]
     Param (
+        [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+        [Alias("Path")]
+        [string]$RegPath,
 
-    [Parameter(Mandatory=$true,Position=0)]
-    [Alias("Path")]
-    [string]$RegPath,
+        [Parameter(Mandatory=$false,Position=1)]
+        [Alias("v")]
+        [string]$Name,
 
-    [Parameter(Mandatory=$false,Position=1)]
-    [Alias("v")]
-    [string]$Name,
+        [Parameter(Mandatory=$false,Position=2)]
+        [Alias("d")]
+        $Value,
 
-    [Parameter(Mandatory=$false,Position=2)]
-    [Alias("d")]
-    $Value,
+        [Parameter(Mandatory=$false,Position=3)]
+        [ValidateSet('None','String','Binary','DWord','ExpandString','MultiString','QWord')]
+        [Alias("PropertyType","t")]
+        [string]$Type,
 
-    [Parameter(Mandatory=$false,Position=3)]
-    [ValidateSet('None','String','Binary','DWord','ExpandString','MultiString','QWord')]
-    [Alias("PropertyType","t")]
-    [string]$Type,
-
-    [Parameter(Mandatory=$false,Position=4,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
-    [ValidateSet('CurrentUser','AllUsers','Default')]
-    [Alias("Users")]
-    [string]$ApplyTo = $Global:ApplyToProfiles,
+        [Parameter(Mandatory=$false,Position=4)]
+        [ValidateSet('CurrentUser','AllUsers','DefaultUser')]
+        [Alias("Users")]
+        [string]$ApplyTo = $Global:ApplyToProfiles,
 
 
-    [Parameter(Mandatory=$false,Position=5)]
-    [Alias("r")]
-    [switch]$Remove,
+        [Parameter(Mandatory=$false,Position=5)]
+        [Alias("r")]
+        [switch]$Remove,
 
-    [Parameter(Mandatory=$false,Position=6)]
-    [Alias("f")]
-    [switch]$Force,
+        [Parameter(Mandatory=$false,Position=6)]
+        [Alias("f")]
+        [switch]$Force,
 
-    [Parameter(Mandatory=$false)]
-    [ValidateNotNullOrEmpty()]
-    [string]$Message,
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Message,
 
-    [Parameter(Mandatory=$false)]
-    [boolean]$TryLGPO,
+        [Parameter(Mandatory=$false)]
+        [boolean]$TryLGPO,
 
-    [Parameter(Mandatory=$false)]
-    $LGPOExe = $Global:LGPOPath,
+        [Parameter(Mandatory=$false)]
+        $LGPOExe = $Global:LGPOPath,
 
-    [Parameter(Mandatory=$false)]
-    [string]$LogPath
+        [Parameter(Mandatory=$false)]
+        [string]$LogPath
 
     )
     Begin
@@ -575,31 +575,58 @@ Function Set-UserSetting {
             $VerbosePreference = $PSCmdlet.SessionState.PSVariable.GetValue('VerbosePreference')
         }
 
+        #If user profile variable doesn't exist, build one
+        If(!$Global:UserProfiles){
+            # Get each user profile SID and Path to the profile
+            $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where-Object {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | 
+                    Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}, @{Name="UserName";Expression={Split-Path $_.ProfileImagePath -Leaf}}
+
+            # Add in the DEFAULT User Profile (Not be confused with .DEFAULT)
+            $DefaultProfile = "" | Select-Object SID, UserHive,UserName
+            $DefaultProfile.SID = "DEFAULT"
+            $DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
+            $DefaultProfile.UserName = "Default"
+
+            #Add it to the UserProfile list
+            $Global:UserProfiles = @()
+            $Global:UserProfiles += $AllProfiles
+            $Global:UserProfiles += $DefaultProfile
+
+            #get current users sid
+            [string]$CurrentSID = (Get-WmiObject win32_useraccount | Where-Object {$_.name -eq $env:username}).SID
+        }
     }
     Process
     { 
+        #grab the hive from the regpath
         $RegKeyHive = ($RegPath).Split('\')[0].Replace('Registry::','').Replace(':','')
-
+        
+        #Grab user keys and profiles based on whom it will be applied to
+        Switch($ApplyTo){
+            'AllUsers'      {$RegHive = 'HKEY_USERS'; $ProfileList = $Global:UserProfiles}
+            'CurrentUser'   {$RegHive = 'HKCU'      ; $ProfileList = ($Global:UserProfiles | Where-Object{$_.SID -eq $CurrentSID})}
+            'DefaultUser'   {$RegHive = 'HKU'       ; $ProfileList = $DefaultProfile}
+            default         {$RegHive = $RegKeyHive ; $ProfileList = $null}
+        }
+        
         #check if hive is local machine.
         If($RegKeyHive -match "HKEY_LOCAL_MACHINE|HKLM|HKCR"){
-            Write-LogEntry "Registry path is not a user path. Use Set-SystemSetting cmdlet"
+            Write-LogEntry ("Registry path [{0}] is not a user path. Use Set-SystemSetting cmdlet instead" -f $RegKeyHive) -Severity 2 -Source ${CmdletName}
             return
         }
-        #check if hive is user hive
+        #check if hive was found and is a user hive
         ElseIf($RegKeyHive -match "HKEY_USERS|HKEY_CURRENT_USER|HKCU|HKU"){
-           #if Name not specified, grab last value from full path
-            If(!$Name){
-                $RegKeyPath = Split-Path ($RegPath).Split('\',2)[1] -Parent
-                $RegKeyName = Split-Path ($RegPath).Split('\',2)[1] -Leaf
-            }
-            Else{
-                $RegKeyPath = ($RegPath).Split('\',2)[1]
-                $RegKeyName = $Name
-            } 
+            #if Name not specified, grab last value from full path
+             If(!$Name){
+                 $RegKeyPath = Split-Path ($RegPath).Split('\',2)[1] -Parent
+                 $RegKeyName = Split-Path ($RegPath).Split('\',2)[1] -Leaf
+             }
+             Else{
+                 $RegKeyPath = ($RegPath).Split('\',2)[1]
+                 $RegKeyName = $Name
+             } 
         }
         ElseIf($ApplyTo){
-            #since a hive was not found, check if its specified
-
             #if Name not specified, grab last value from full path
             If(!$Name){
                 $RegKeyPath = Split-Path ($RegPath) -Parent
@@ -611,43 +638,12 @@ Function Set-UserSetting {
             } 
         }
         Else{
-            Write-LogEntry "User registry key not found or specified. Unable to continue..." -Severity 3
+            Write-LogEntry ("User registry hive was not found or specified in Keypath [{0}]. Either use the -ApplyTo Switch or specify user hive [eg. HKCU\]..." -f $RegPath) -Severity 3 -Source ${CmdletName}
             return
-
         }
-
-        #If user profile variable doesn't exist, build one
-        If(!$Global:UserProfiles){
-            # Get each user profile SID and Path to the profile
-            $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
-
-            # Add in the .DEFAULT User Profile
-            $DefaultProfile = "" | Select-Object SID, UserHive
-            $DefaultProfile.SID = "DEFAULT"
-            $DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
-
-            #Add it to the UserProfile list
-            $Global:UserProfiles = @()
-            $Global:UserProfiles += $AllProfiles
-            $Global:UserProfiles += $DefaultProfile
-
-            #get current users sid
-            [string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
-        }
-
-        #overwrite Hive if specified
-        If($ApplyTo){
-            Switch($ApplyTo){
-                'AllUsers' {$RegHive = "HKEY_USERS"; $ProfileList = $Global:UserProfiles}
-                'CurrentUser'   {$RegHive = "HKCU" ; $ProfileList = $Global:UserProfiles }
-                'Default'       {$RegHive = "HKU"  ; $ProfileList = 'Default'}
-            }
-        }
-        Else{
-            $RegHive = $RegKeyHive
-        }
-               
-        If($RegHive -eq "HKEY_USERS"){
+  
+        #loope through profiles as long as the hive is not the current user hive
+        If($RegHive -notmatch 'HKCU|HKEY_CURRENT_USER'){
 
             $p = 1
             # Loop through each profile on the machine
@@ -672,14 +668,14 @@ Function Set-UserSetting {
                 If ($HiveLoaded -eq $true) {   
                     If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserID)}
                     If($Remove){
-                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
+                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -ErrorAction SilentlyContinue | Out-Null  
                     }
                     Else{
-                        Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+                        Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
                     }
                 }
 
-                #remove any leftove reg process and then remove hive
+                #remove any leftover reg process and then remove hive
                 If ($HiveLoaded -eq $true) {
                     [gc]::Collect()
                     Start-Sleep -Seconds 3
@@ -691,10 +687,10 @@ Function Set-UserSetting {
         Else{
             If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ApplyTo)}
             If($Remove){
-                Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
+                Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -ErrorAction SilentlyContinue | Out-Null  
             }
             Else{
-                Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $Name -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+                Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
             }
         }
 
@@ -706,32 +702,32 @@ Function Set-UserSetting {
 
 #region Function Get-InstalledApplication
 Function Get-InstalledApplication {
-<#
-.SYNOPSIS
-	Retrieves information about installed applications.
-.DESCRIPTION
-	Retrieves information about installed applications by querying the registry. You can specify an application name, a product code, or both.
-	Returns information about application publisher, name & version, product code, uninstall string, install source, location, date, and application architecture.
-.PARAMETER Name
-	The name of the application to retrieve information for. Performs a contains match on the application display name by default.
-.PARAMETER Exact
-	Specifies that the named application must be matched using the exact name.
-.PARAMETER WildCard
-	Specifies that the named application must be matched using a wildcard search.
-.PARAMETER RegEx
-	Specifies that the named application must be matched using a regular expression search.
-.PARAMETER ProductCode
-	The product code of the application to retrieve information for.
-.PARAMETER IncludeUpdatesAndHotfixes
-	Include matches against updates and hotfixes in results.
-.EXAMPLE
-	Get-InstalledApplication -Name 'Adobe Flash'
-.EXAMPLE
-	Get-InstalledApplication -ProductCode '{1AD147D0-BE0E-3D6C-AC11-64F6DC4163F1}'
-.NOTES
-.LINK
-	http://psappdeploytoolkit.com
-#>
+    <#
+    .SYNOPSIS
+        Retrieves information about installed applications.
+    .DESCRIPTION
+        Retrieves information about installed applications by querying the registry. You can specify an application name, a product code, or both.
+        Returns information about application publisher, name & version, product code, uninstall string, install source, location, date, and application architecture.
+    .PARAMETER Name
+        The name of the application to retrieve information for. Performs a contains match on the application display name by default.
+    .PARAMETER Exact
+        Specifies that the named application must be matched using the exact name.
+    .PARAMETER WildCard
+        Specifies that the named application must be matched using a wildcard search.
+    .PARAMETER RegEx
+        Specifies that the named application must be matched using a regular expression search.
+    .PARAMETER ProductCode
+        The product code of the application to retrieve information for.
+    .PARAMETER IncludeUpdatesAndHotfixes
+        Include matches against updates and hotfixes in results.
+    .EXAMPLE
+        Get-InstalledApplication -Name 'Adobe Flash'
+    .EXAMPLE
+        Get-InstalledApplication -ProductCode '{1AD147D0-BE0E-3D6C-AC11-64F6DC4163F1}'
+    .NOTES
+    .LINK
+        http://psappdeploytoolkit.com
+    #>
 	[CmdletBinding()]
 	Param (
 		[Parameter(Mandatory=$false)]
@@ -1033,7 +1029,7 @@ If($RemoveAppxPackages)
     Show-ProgressStatus -Message "Removing AppxPackage and AppxProvisioningPackage" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     
     # Get a list of all apps
-    $AppArrayList = Get-AppxPackage -PackageTypeFilter Bundle -AllUsers | Select-Object -Property Name, PackageFullName | Sort-Object -Property Name
+    $AppArrayList = Get-AppxPackage -PackageTypeFilter Bundle -AllUsers | Select-Object -Property Name, PackageFullName,PackageUserInformation | Sort-Object -Property Name
 
     # White list of appx packages to keep installed
     $WhiteListedApps = @(
@@ -1057,45 +1053,45 @@ If($RemoveAppxPackages)
 
         # If application name not in appx package white list, remove AppxPackage and AppxProvisioningPackage
         if (($App.Name -in $WhiteListedApps)) {
-            $status = "Skipping excluded application package: $($App.Name)"
-            Write-LogEntry -Message $status -Outhost
+            Write-LogEntry -Message ("Skipping excluded application package: {0}" -f $App.Name) -Outhost
         }
         else {
             # Gather package names
             $AppPackageFullName = Get-AppxPackage -Name $App.Name | Select-Object -ExpandProperty PackageFullName
+            
             $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $App.Name } | Select-Object -ExpandProperty PackageName
 
             # Attempt to remove AppxPackage
-            if ($AppPackageFullName -ne $null) {
-                $status = "Removing application package: $($App.Name)"
-                Show-ProgressStatus -Message $status -Step $p -MaxStep $AppArrayList.count
+            if ($null -ne $AppPackageFullName) {
+                Show-ProgressStatus -Message ("Removing application package: {0}" -f $App.Name) -Step $p -MaxStep $AppArrayList.count
                 
                 try {
                     Remove-AppxPackage -Package $AppPackageFullName -ErrorAction Stop | Out-Null
-                    Write-LogEntry -Message "Successfully removed application package: $($App.Name)" -Outhost
+                    
+                    Write-LogEntry -Message ("Successfully removed application package: {0}" -f $App.Name) -Outhost
                     $c++
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Message "Failed removing AppxPackage: $($_.Exception.Message)" -Severity 3 -Outhost
+                    Write-LogEntry -Message ("Failed removing AppxPackage: {0}" -f $_.Message) -Severity 3 -Outhost
                 }
             }
             else {
-                Write-LogEntry -Message "Unable to locate AppxPackage for app: $($App.Name)" -Outhost
+                Write-LogEntry -Message ("Unable to locate AppxPackage for app: {0}" -f $App.Name) -Outhost
             }
 
             # Attempt to remove AppxProvisioningPackage
-            if ($AppProvisioningPackageName -ne $null) {
-                Write-LogEntry -Message "Removing application provisioning package: $($AppProvisioningPackageName)"
+            if ($null -eq $AppProvisioningPackageName) {
+                Write-LogEntry -Message ("Removing application provisioning package: {0}" -f $AppProvisioningPackageName)
                 try {
                     Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
-                    Write-LogEntry -Message "Successfully removed application provisioning package: $AppProvisioningPackageName" -Outhost
+                    Write-LogEntry -Message ("Successfully removed application provisioning package: {0}" -f $AppProvisioningPackageName) -Outhost
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Message "Failed removing AppxProvisioningPackage: $($_.Exception.Message)" -Severity 3 -Outhost
+                    Write-LogEntry -Message ("Failed removing Appx Provisioning Package: {0}" -f $_.Message) -Severity 3 -Outhost
                 }
             }
             else {
-                Write-LogEntry -Message "Unable to locate AppxProvisioningPackage for app: $($App.Name)" -Outhost
+                Write-LogEntry -Message ("Unable to locate Appx Provisioning Package for app: {0}" -f $App.Name) -Outhost
             }
 
         }
@@ -1112,47 +1108,37 @@ If($RemoveFODPackages)
 {
     Show-ProgressStatus -Message "Starting Features on Demand V2 removal process" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     
-    # White list of Features On Demand V2 packages
+    # White list of Features On Demand V2 packages of what NOT to remove
     $WhiteListOnDemand = "NetFX3|Tools.Graphics.DirectX|Tools.DeveloperMode.Core|Language|Browser.InternetExplorer|ContactSupport|OneCoreUAP|Media.WindowsMediaPlayer|Rsat"
-
-    # Get Features On Demand that should be removed
-    $OnDemandFeatures = Get-WindowsCapability -Online | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
-
+    
     try {
+        # Get Features On Demand that should be removed
+        $OnDemandFeatures = Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
 
-        # Handle cmdlet limitations for older OS builds
-        if ($OSBuildNumber -le "16299") {
-            $OnDemandFeatures = Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
-        }
-        else {
-            $OnDemandFeatures = Get-WindowsCapability -Online -LimitAccess -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
-        }
         $f=1
         foreach ($Feature in $OnDemandFeatures) {
             try {
-                Show-ProgressStatus -Message "Removing Feature on Demand V2 package: $($Feature)" -Step $f -MaxStep $OnDemandFeatures.count -Outhost
-                # Handle cmdlet limitations for older OS builds
-                if ($OSBuildNumber -le "16299") {
-                    Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -like $Feature } | Remove-WindowsCapability -Online -ErrorAction Stop | Out-Null
-                }
-                else {
-                    Get-WindowsCapability -Online -LimitAccess -ErrorAction Stop | Where-Object { $_.Name -like $Feature } | Remove-WindowsCapability -Online -ErrorAction Stop | Out-Null
+                Show-ProgressStatus -Message ("Removing Feature on Demand V2 package: {0}" -f $Feature) -Step $f -MaxStep $OnDemandFeatures.count -Outhost
+                $results = Remove-WindowsCapability -Name $Feature -Online -ErrorAction Stop
+                if ($results.RestartNeeded -eq $true) {
+                    Write-LogEntry ("Reboot is required for remving the Feature on Demand package: {0}" -f $FeatName)
                 }
             }
             catch [System.Exception] {
-                Write-LogEntry -Message "Failed to remove Feature on Demand V2 package: $($_.Exception.Message)" -Severity 3 -Outhost
+                Write-LogEntry -Message ("Failed to remove Feature on Demand V2 package: {0}" -f $_.Message) -Severity 3 -Outhost
             }
 
             $f++
         }
     }
     catch [System.Exception] {
-        Write-LogEntry -Message "Failed attempting to list Feature on Demand V2 packages: $($_.Exception.Message)" -Severity 3 -Outhost
+        Write-LogEntry -Message ("Failed attempting to list Feature on Demand V2 packages: {0}" -f $_.Message) -Severity 3 -Outhost
     }
-    # Complete
-    Show-ProgressStatus -Message "Completed Features on Demand V2 removal process" -Step $script:maxSteps -MaxStep $script:maxSteps
-
+    Finally{
+        # Complete
+        Show-ProgressStatus -Message "Completed Features on Demand V2 removal process" -Step $script:maxSteps -MaxStep $script:maxSteps
+    }
 }
 Else{$stepCounter++}
 
-Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps
+Show-ProgressStatus -Message 'Completed App Optimizations and Configuration' -Step $script:maxSteps -MaxStep $script:maxSteps

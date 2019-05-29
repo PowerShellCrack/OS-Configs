@@ -1576,4 +1576,4 @@ If($ApplyEMETMitigations)
 }
 Else{$stepCounter++}
 
-Show-ProgressStatus -Message 'Completed' -Step $script:maxSteps -MaxStep $script:maxSteps
+Show-ProgressStatus -Message 'Completed Windows 10 STIGS and Mitigations' -Step $script:maxSteps -MaxStep $script:maxSteps
