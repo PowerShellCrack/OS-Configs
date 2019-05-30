@@ -24,8 +24,8 @@
 
     .NOTES
         Author:         Richard Tracy
-        Last Update:    05/28/2019
-        Version:        2.1.3
+        Last Update:    05/29/2019
+        Version:        2.1.4
            
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
@@ -40,6 +40,7 @@
         #Add script to task sequence
 
     .LOGS
+        2.1.4 - May 28, 2019 - fixed set-usersettings default users,resolved all VSC problems
         2.1.3 - May 28, 2019 - fixed Get-SMSTSENV log path
         2.1.2 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings   
         2.1.1 - May 10, 2019 - reorganized controls in categories
@@ -59,7 +60,7 @@ Function Test-IsISE {
     # try...catch accounts for:
     # Set-StrictMode -Version latest
     try {    
-        return $psISE -ne $null;
+        return ($null -ne $psISE);
     }
     catch {
         return $false;
@@ -67,8 +68,6 @@ Function Test-IsISE {
 }
 
 Function Get-ScriptPath {
-    If (Test-Path -LiteralPath 'variable:HostInvocation') { $InvocationInfo = $HostInvocation } Else { $InvocationInfo = $MyInvocation }
-
     # Makes debugging from ISE easier.
     if ($PSScriptRoot -eq "")
     {
@@ -122,7 +121,7 @@ Function Get-SMSTSENV{
                 $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
 
                 # Convert all of the variables currently in the environment to PowerShell variables
-                $tsenv.GetVariables() | % { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
+                $tsenv.GetVariables() | ForEach-Object { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
                 
                 # Query the environment to get an existing variable
                 # Set a variable for the task sequence log path
@@ -161,7 +160,6 @@ Function Format-ElapsedTime($ts) {
 Function Format-DatePrefix{
     [string]$LogTime = (Get-Date -Format 'HH:mm:ss.fff').ToString()
 	[string]$LogDate = (Get-Date -Format 'MM-dd-yyyy').ToString()
-    $CombinedDateTime = "$LogDate $LogTime"
     return ($LogDate + " " + $LogTime)
 }
 
@@ -183,55 +181,102 @@ Function Write-LogEntry{
         [parameter(Mandatory=$false)]
         [switch]$Outhost
     )
-    ## Get the name of this function
-    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+    Begin{
+        [string]$LogTime = (Get-Date -Format 'HH:mm:ss.fff').ToString()
+        [string]$LogDate = (Get-Date -Format 'MM-dd-yyyy').ToString()
+        [int32]$script:LogTimeZoneBias = [timezone]::CurrentTimeZone.GetUtcOffset([datetime]::Now).TotalMinutes
+        [string]$LogTimePlusBias = $LogTime + $script:LogTimeZoneBias
+        
+    }
+    Process{
+        # Get the file name of the source script
+        Try {
+            If ($script:MyInvocation.Value.ScriptName) {
+                [string]$ScriptSource = Split-Path -Path $script:MyInvocation.Value.ScriptName -Leaf -ErrorAction 'Stop'
+            }
+            Else {
+                [string]$ScriptSource = Split-Path -Path $script:MyInvocation.MyCommand.Definition -Leaf -ErrorAction 'Stop'
+            }
+        }
+        Catch {
+            $ScriptSource = ''
+        }
+        
+        
+        If(!$Severity){$Severity = 1}
+        $LogFormat = "<![LOG[$Message]LOG]!>" + "<time=`"$LogTimePlusBias`" " + "date=`"$LogDate`" " + "component=`"$ScriptSource`" " + "context=`"$([Security.Principal.WindowsIdentity]::GetCurrent().Name)`" " + "type=`"$Severity`" " + "thread=`"$PID`" " + "file=`"$ScriptSource`">"
+        
+        # Add value to log file
+        try {
+            Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
+        }
+        catch {
+            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
+        }
+    }
+    End{
+        If($Outhost -or $Global:OutTohost){
+            If($Source){
+                $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$Source,$Message)
+            }
+            Else{
+                $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$ScriptSource,$Message)
+            }
 
-    [string]$LogTime = (Get-Date -Format 'HH:mm:ss.fff').ToString()
-	[string]$LogDate = (Get-Date -Format 'MM-dd-yyyy').ToString()
-	[int32]$script:LogTimeZoneBias = [timezone]::CurrentTimeZone.GetUtcOffset([datetime]::Now).TotalMinutes
-	[string]$LogTimePlusBias = $LogTime + $script:LogTimeZoneBias
-    #  Get the file name of the source script
+            Switch($Severity){
+                0       {Write-Host $OutputMsg -ForegroundColor Green}
+                1       {Write-Host $OutputMsg -ForegroundColor Gray}
+                2       {Write-Warning $OutputMsg}
+                3       {Write-Host $OutputMsg -ForegroundColor Red}
+                4       {If($Global:Verbose){Write-Verbose $OutputMsg}}
+                default {Write-Host $OutputMsg}
+            }
+        }
+    }
+}
 
-    Try {
-	    If ($script:MyInvocation.Value.ScriptName) {
-		    [string]$ScriptSource = Split-Path -Path $script:MyInvocation.Value.ScriptName -Leaf -ErrorAction 'Stop'
-	    }
-	    Else {
-		    [string]$ScriptSource = Split-Path -Path $script:MyInvocation.MyCommand.Definition -Leaf -ErrorAction 'Stop'
-	    }
+
+Function Set-Bluetooth{
+    [CmdletBinding()] 
+    Param (
+    [Parameter(Mandatory=$true)][ValidateSet('Off', 'On')]
+    [string]$DeviceStatus
+    )
+    Begin{
+        ## Get the name of this function
+        [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
     }
-    Catch {
-	    $ScriptSource = ''
-    }
-    
-    
-    If(!$Severity){$Severity = 1}
-    $LogFormat = "<![LOG[$Message]LOG]!>" + "<time=`"$LogTimePlusBias`" " + "date=`"$LogDate`" " + "component=`"$ScriptSource`" " + "context=`"$([Security.Principal.WindowsIdentity]::GetCurrent().Name)`" " + "type=`"$Severity`" " + "thread=`"$PID`" " + "file=`"$ScriptSource`">"
-    
-    # Add value to log file
-    try {
-        Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
-    }
-    catch {
-        Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
-    }
-    If($Outhost){
-        If($Source){
-            $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$Source,$Message)
+    Process{
+        Add-Type -AssemblyName System.Runtime.WindowsRuntime
+        $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object{ $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+        Function Await($WinRtTask, $ResultType) {
+            $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+            $netTask = $asTask.Invoke($null, @($WinRtTask))
+            $netTask.Wait(-1) | Out-Null
+            $netTask.Result
+        }
+        [Windows.Devices.Radios.Radio,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+        [Windows.Devices.Radios.RadioAccessStatus,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+        Await ([Windows.Devices.Radios.Radio]::RequestAccessAsync()) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
+        $radios = Await ([Windows.Devices.Radios.Radio]::GetRadiosAsync()) ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Radios.Radio]])
+        $bluetooth = $radios | Where-Object { $_.Kind -eq 'Bluetooth' }
+        [Windows.Devices.Radios.RadioState,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+        If($bluetooth){
+            Try{
+                Await ($bluetooth.SetStateAsync($DeviceStatus)) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
+            }
+            Catch{
+                Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Source ${CmdletName}
+            }
+            Finally{
+                #If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
+            }
         }
         Else{
-            $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$ScriptSource,$Message)
-        }
-
-        Switch($Severity){
-            0       {Write-Host $OutputMsg -ForegroundColor Green}
-            1       {Write-Host $OutputMsg -ForegroundColor Gray}
-            2       {Write-Warning $OutputMsg}
-            3       {Write-Host $OutputMsg -ForegroundColor Red}
-            4       {If($Global:Verbose){Write-Verbose $OutputMsg}}
-            default {Write-Host $OutputMsg}
+            Write-LogEntry ("No Bluetooth found") -Severity 0 -Source ${CmdletName}
         }
     }
+    End{}
 }
 
 function Show-ProgressStatus
@@ -315,47 +360,6 @@ function Show-ProgressStatus
     End{
         Write-LogEntry $Message -Severity 1 -Outhost:$Outhost
     }
-}
-
-
-Function Config-Bluetooth{
-    [CmdletBinding()] 
-    Param (
-    [Parameter(Mandatory=$true)][ValidateSet('Off', 'On')]
-    [string]$DeviceStatus
-    )
-
-    ## Get the name of this function
-    [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
-
-    If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
-    
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime
-    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
-    Function Await($WinRtTask, $ResultType) {
-        $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
-        $netTask = $asTask.Invoke($null, @($WinRtTask))
-        $netTask.Wait(-1) | Out-Null
-        $netTask.Result
-    }
-    [Windows.Devices.Radios.Radio,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
-    [Windows.Devices.Radios.RadioAccessStatus,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
-    Await ([Windows.Devices.Radios.Radio]::RequestAccessAsync()) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
-    $radios = Await ([Windows.Devices.Radios.Radio]::GetRadiosAsync()) ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Radios.Radio]])
-    $bluetooth = $radios | ? { $_.Kind -eq 'Bluetooth' }
-    [Windows.Devices.Radios.RadioState,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
-    If($bluetooth){
-        Try{
-            Await ($bluetooth.SetStateAsync($DeviceStatus)) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
-        }
-        Catch{
-            Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Outhost
-        }
-    }
-    Else{
-        Write-LogEntry ("No Bluetooth found") -Severity 0 -Outhost
-    }
-    
 }
 
 
@@ -449,7 +453,7 @@ Function Set-SystemSetting {
             'None' {$LGPORegType = 'NONE'}
             'String' {$LGPORegType = 'SZ'}
             'ExpandString' {$LGPORegType = 'EXPAND_SZ'}
-            'Binary' {$LGPORegType = 'BINARY'}
+            'Binary' {$LGPORegType = 'BINARY'; $value = Convert-ToHexString $value}
             'DWord' {$LGPORegType = 'DWORD'}
             'QWord' {$LGPORegType = 'DWORD_BIG_ENDIAN'}
             'MultiString' {$LGPORegType = 'LINK'}
@@ -471,7 +475,14 @@ Function Set-SystemSetting {
                     
                     # build a unique output file
                     $LGPOfile = ($RegKeyHive + '-' + $RegKeyPath.replace('\','-').replace(' ','') + '-' + $RegKeyName.replace(' ','') + '.lgpo')
-            
+                    
+                    #Remove the Username or SID from Registry key path
+                    If($LGPOHive -eq 'User'){
+                        $UserID = $RegKeyPath.Split('\')[0]
+                        If($UserID -match "DEFAULT|S-1-5-21-(\d+-?){4}$"){
+                            $RegKeyPath = $RegKeyPath.Replace($UserID+"\","")
+                        }
+                    }
                     #complete LGPO file
                     Write-LogEntry ("LGPO applying [{3}] to registry: [{0}\{1}\{2}] as a Group Policy item" -f $RegHive,$RegKeyPath,$RegKeyName,$RegKeyName) -Severity 4 -Source ${CmdletName}
                     $lgpoout += "$LGPOHive`r`n"
@@ -538,52 +549,51 @@ Function Set-SystemSetting {
 
 
 Function Set-UserSetting {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='Medium')]
     Param (
+        [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+        [Alias("Path")]
+        [string]$RegPath,
 
-    [Parameter(Mandatory=$true,Position=0)]
-    [Alias("Path")]
-    [string]$RegPath,
+        [Parameter(Mandatory=$false,Position=1)]
+        [Alias("v")]
+        [string]$Name,
 
-    [Parameter(Mandatory=$false,Position=1)]
-    [Alias("v")]
-    [string]$Name,
+        [Parameter(Mandatory=$false,Position=2)]
+        [Alias("d")]
+        $Value,
 
-    [Parameter(Mandatory=$false,Position=2)]
-    [Alias("d")]
-    $Value,
+        [Parameter(Mandatory=$false,Position=3)]
+        [ValidateSet('None','String','Binary','DWord','ExpandString','MultiString','QWord')]
+        [Alias("PropertyType","t")]
+        [string]$Type,
 
-    [Parameter(Mandatory=$false,Position=3)]
-    [ValidateSet('None','String','Binary','DWord','ExpandString','MultiString','QWord')]
-    [Alias("PropertyType","t")]
-    [string]$Type,
-
-    [Parameter(Mandatory=$false,Position=4,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
-    [ValidateSet('CurrentUser','AllUsers','Default')]
-    [Alias("Users")]
-    [string]$ApplyTo = $Global:ApplyToProfiles,
+        [Parameter(Mandatory=$false,Position=4)]
+        [ValidateSet('CurrentUser','AllUsers','DefaultUser')]
+        [Alias("Users")]
+        [string]$ApplyTo = $Global:ApplyToProfiles,
 
 
-    [Parameter(Mandatory=$false,Position=5)]
-    [Alias("r")]
-    [switch]$Remove,
+        [Parameter(Mandatory=$false,Position=5)]
+        [Alias("r")]
+        [switch]$Remove,
 
-    [Parameter(Mandatory=$false,Position=6)]
-    [Alias("f")]
-    [switch]$Force,
+        [Parameter(Mandatory=$false,Position=6)]
+        [Alias("f")]
+        [switch]$Force,
 
-    [Parameter(Mandatory=$false)]
-    [ValidateNotNullOrEmpty()]
-    [string]$Message,
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Message,
 
-    [Parameter(Mandatory=$false)]
-    [boolean]$TryLGPO,
+        [Parameter(Mandatory=$false)]
+        [boolean]$TryLGPO,
 
-    [Parameter(Mandatory=$false)]
-    $LGPOExe = $Global:LGPOPath,
+        [Parameter(Mandatory=$false)]
+        $LGPOExe = $Global:LGPOPath,
 
-    [Parameter(Mandatory=$false)]
-    [string]$LogPath
+        [Parameter(Mandatory=$false)]
+        [string]$LogPath
 
     )
     Begin
@@ -595,31 +605,65 @@ Function Set-UserSetting {
             $VerbosePreference = $PSCmdlet.SessionState.PSVariable.GetValue('VerbosePreference')
         }
 
+        if (-not $PSBoundParameters.ContainsKey('Confirm')) {
+            $ConfirmPreference = $PSCmdlet.SessionState.PSVariable.GetValue('ConfirmPreference')
+        }
+        if (-not $PSBoundParameters.ContainsKey('WhatIf')) {
+            $WhatIfPreference = $PSCmdlet.SessionState.PSVariable.GetValue('WhatIfPreference')
+        }
+
+        #If user profile variable doesn't exist, build one
+        If(!$Global:UserProfiles){
+            # Get each user profile SID and Path to the profile
+            $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where-Object {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | 
+                    Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}, @{Name="UserName";Expression={Split-Path $_.ProfileImagePath -Leaf}}
+
+            # Add in the DEFAULT User Profile (Not be confused with .DEFAULT)
+            $DefaultProfile = "" | Select-Object SID, UserHive,UserName
+            $DefaultProfile.SID = "DEFAULT"
+            $DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
+            $DefaultProfile.UserName = "Default"
+
+            #Add it to the UserProfile list
+            $Global:UserProfiles = @()
+            $Global:UserProfiles += $AllProfiles
+            $Global:UserProfiles += $DefaultProfile
+
+            #get current users sid
+            [string]$CurrentSID = (Get-WmiObject win32_useraccount | Where-Object {$_.name -eq $env:username}).SID
+        }
     }
     Process
     { 
+        #grab the hive from the regpath
         $RegKeyHive = ($RegPath).Split('\')[0].Replace('Registry::','').Replace(':','')
-
+        
+        #Grab user keys and profiles based on whom it will be applied to
+        Switch($ApplyTo){
+            'AllUsers'      {$RegHive = 'HKEY_USERS'; $ProfileList = $Global:UserProfiles}
+            'CurrentUser'   {$RegHive = 'HKCU'      ; $ProfileList = ($Global:UserProfiles | Where-Object{$_.SID -eq $CurrentSID})}
+            'DefaultUser'   {$RegHive = 'HKU'       ; $ProfileList = $DefaultProfile}
+            default         {$RegHive = $RegKeyHive ; $ProfileList = ($Global:UserProfiles | Where-Object{$_.SID -eq $CurrentSID})}
+        }
+        
         #check if hive is local machine.
         If($RegKeyHive -match "HKEY_LOCAL_MACHINE|HKLM|HKCR"){
-            Write-LogEntry "Registry path is not a user path. Use Set-SystemSetting cmdlet"
+            Write-LogEntry ("Registry path [{0}] is not a user path. Use Set-SystemSetting cmdlet instead" -f $RegKeyHive) -Severity 2 -Source ${CmdletName}
             return
         }
-        #check if hive is user hive
+        #check if hive was found and is a user hive
         ElseIf($RegKeyHive -match "HKEY_USERS|HKEY_CURRENT_USER|HKCU|HKU"){
-           #if Name not specified, grab last value from full path
-            If(!$Name){
-                $RegKeyPath = Split-Path ($RegPath).Split('\',2)[1] -Parent
-                $RegKeyName = Split-Path ($RegPath).Split('\',2)[1] -Leaf
-            }
-            Else{
-                $RegKeyPath = ($RegPath).Split('\',2)[1]
-                $RegKeyName = $Name
-            } 
+            #if Name not specified, grab last value from full path
+             If(!$Name){
+                 $RegKeyPath = Split-Path ($RegPath).Split('\',2)[1] -Parent
+                 $RegKeyName = Split-Path ($RegPath).Split('\',2)[1] -Leaf
+             }
+             Else{
+                 $RegKeyPath = ($RegPath).Split('\',2)[1]
+                 $RegKeyName = $Name
+             } 
         }
         ElseIf($ApplyTo){
-            #since a hive was not found, check if its specified
-
             #if Name not specified, grab last value from full path
             If(!$Name){
                 $RegKeyPath = Split-Path ($RegPath) -Parent
@@ -631,43 +675,12 @@ Function Set-UserSetting {
             } 
         }
         Else{
-            Write-LogEntry "User registry key not found or specified. Unable to continue..." -Severity 3
+            Write-LogEntry ("User registry hive was not found or specified in Keypath [{0}]. Either use the -ApplyTo Switch or specify user hive [eg. HKCU\]..." -f $RegPath) -Severity 3 -Source ${CmdletName}
             return
-
         }
-
-        #If user profile variable doesn't exist, build one
-        If(!$Global:UserProfiles){
-            # Get each user profile SID and Path to the profile
-            $AllProfiles = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*" | Where {$_.PSChildName -match "S-1-5-21-(\d+-?){4}$" } | Select-Object @{Name="SID"; Expression={$_.PSChildName}}, @{Name="UserHive";Expression={"$($_.ProfileImagePath)\NTuser.dat"}}
-
-            # Add in the .DEFAULT User Profile
-            $DefaultProfile = "" | Select-Object SID, UserHive
-            $DefaultProfile.SID = "DEFAULT"
-            $DefaultProfile.Userhive = "$env:systemdrive\Users\Default\NTuser.dat"
-
-            #Add it to the UserProfile list
-            $Global:UserProfiles = @()
-            $Global:UserProfiles += $AllProfiles
-            $Global:UserProfiles += $DefaultProfile
-
-            #get current users sid
-            [string]$CurrentSID = (gwmi win32_useraccount | ? {$_.name -eq $env:username}).SID
-        }
-
-        #overwrite Hive if specified
-        If($ApplyTo){
-            Switch($ApplyTo){
-                'AllUsers' {$RegHive = "HKEY_USERS"; $ProfileList = $Global:UserProfiles}
-                'CurrentUser'   {$RegHive = "HKCU" ; $ProfileList = $Global:UserProfiles }
-                'Default'       {$RegHive = "HKU"  ; $ProfileList = 'Default'}
-            }
-        }
-        Else{
-            $RegHive = $RegKeyHive
-        }
-               
-        If($RegHive -eq "HKEY_USERS"){
+  
+        #loope through profiles as long as the hive is not the current user hive
+        If($RegHive -notmatch 'HKCU|HKEY_CURRENT_USER'){
 
             $p = 1
             # Loop through each profile on the machine
@@ -675,13 +688,13 @@ Function Set-UserSetting {
                 
                 Try{
                     $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-                    $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
+                    $UserName = $objSID.Translate([System.Security.Principal.NTAccount]) 
                 }
                 Catch{
-                    $UserID = $UserProfile.SID
+                    $UserName = $UserProfile.UserName
                 }
 
-                If($Message){Show-ProgressStatus -Message $Message -SubMessage ("for user profile ({0} of {1})" -f $p,$ProfileList.count) -Step $p -MaxStep $ProfileList.count}
+                If($Message){Show-ProgressStatus -Message $Message -SubMessage ("(Users: {0} of {1})" -f $p,$ProfileList.count) -Step $p -MaxStep $ProfileList.count}
 
                 #loadhive if not mounted
                 If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
@@ -690,16 +703,16 @@ Function Set-UserSetting {
                 }
 
                 If ($HiveLoaded -eq $true) {   
-                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserID)}
+                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserName)}
                     If($Remove){
-                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
+                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
                     }
                     Else{
-                        Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+                        Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -TryLGPO:$TryLGPO
                     }
                 }
 
-                #remove any leftove reg process and then remove hive
+                #remove any leftover reg process and then remove hive
                 If ($HiveLoaded -eq $true) {
                     [gc]::Collect()
                     Start-Sleep -Seconds 3
@@ -709,12 +722,12 @@ Function Set-UserSetting {
             }
         }
         Else{
-            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ApplyTo)}
+            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ProfileList.UserName)}
             If($Remove){
-                Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $Name -ErrorAction SilentlyContinue | Out-Null  
+                Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
             }
             Else{
-                Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $Name -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+                Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -TryLGPO:$TryLGPO
             }
         }
 
@@ -723,7 +736,6 @@ Function Set-UserSetting {
        If($Message){Show-ProgressStatus -Message "Completed $Message"  -Step 1 -MaxStep 1}
     }
 }
-
 
 ##*===========================================================================
 ##* VARIABLES
@@ -806,7 +818,7 @@ If(Get-SMSTSENV -NoWarning){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:Ap
 If((Get-SMSTSENV -NoWarning) -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
 
 #grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((Get-Content $scriptPath), [ref]$null) | Where-Object { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
 #set counter to one
 $stepCounter = 1
 
@@ -829,24 +841,24 @@ If($ApplySTIGItems )
     }
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-83411r1_rule :: Enabling Powershell Script Block Logging..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' -Name 'EnableScriptBlockLogging' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "Applying STIG Items..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78039r1_rule :: Disabling Autorun for local volumes..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoAutoplayfornonVolume -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'NoAutoplayfornonVolume' -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78161r1_rule :: Disabling Autorun for local machine..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoAutorun -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'NoAutorun' -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78163r1_rule :: Disabling Autorun for local drive..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name NoDriveTypeAutoRun -Type DWord -Value 0xFF -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'NoDriveTypeAutoRun' -Type DWord -Value 0xFF -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "Disabling Bluetooth..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Config-Bluetooth -DeviceStatus Off
+    Set-Bluetooth -DeviceStatus Off
 
     Show-ProgressStatus -Message "TIG Rule ID: SV-78301r1_rule :: Enabling FIPS Algorithm Policy" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM\System\CurrentControlSet\Control\Lsa\FIPSAlgorithmPolicy" -Name Enabled -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path 'HKLM\System\CurrentControlSet\Control\Lsa\FIPSAlgorithmPolicy' -Name 'Enabled' -Type DWord -Value 1 -Force
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-96851r1_rule :: Disabling personal accounts for OneDrive synchronization..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisablePersonalSync' -Type DWord -Value '1' -Force -TryLGPO:$true
@@ -866,7 +878,7 @@ If($ApplySTIGItems )
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableWindowsConsumerFeatures' -Type DWord -Value '1' -Force -TryLGPO:$true| Out-Null
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-89091r1_rule :: Privacy Mitigations :: Disabling Xbox features..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" -Name "AllowGameDVR" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' -Name 'AllowGameDVR' -Type DWord -Value 0 -Force -TryLGPO:$true
 
 	Write-LogEntry ("STIG Rule ID: SV-78173r3_rule :: Privacy Mitigations :: {0}Disabling telemetry..." -f $prefixmsg) -Outhost
 	If ($OsCaption -like "*Enterprise*" -or $OsCaption -like "*Education*"){
@@ -885,18 +897,18 @@ If($ApplySTIGItems )
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'LimitEnhancedDiagnosticDataWindowsAnalytics' -Type DWord -Value 1 -Force -TryLGPO:$true  
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-77825r1_rule :: Disabling Basic Authentication for WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" -Name "AllowBasic" -Type DWord -Value 0 -Force -TryLGPO:$true
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" -Name "AllowBasic" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service' -Name 'AllowBasic' -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client' -Name 'AllowBasic' -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-77829r1_rule :: Disabling unencrypted traffic for WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" -Name "AllowUnencryptedTraffic" -Type DWord -Value 0 -Force -TryLGPO:$true
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" -Name "AllowUnencryptedTraffic" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service' -Name 'AllowUnencryptedTraffic' -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client' -Name 'AllowUnencryptedTraffic' -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-77831r1_rule :: Disabling Digest authentication for WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" -Name "AllowDigest" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client' -Name 'AllowDigest' -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-77831r1_rule :: Disabling Digest authentication for WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service" -Name "DisableRunAs" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service' -Name 'DisableRunAs' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78309r1_rule :: Enabling UAC prompt administrators for consent on the secure desktop..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -Type DWord -Value 2 -Force -TryLGPO:$true
@@ -905,31 +917,31 @@ If($ApplySTIGItems )
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorUser -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC prompt detect application installations and prompt for elevation..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableInstallerDetection" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableInstallerDetection' -Type DWord -Value 1 -Force -TryLGPO:$true
     
     Show-ProgressStatus -Message "STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC UIAccess applications that are installed in secure locations..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableSecureUAIPaths" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableSecureUAIPaths' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78321r1_rule :: Enabling Enable virtualize file and registry write failures to per-user locations.." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualization" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableVirtualization' -Type DWord -Value 1 -Force -TryLGPO:$true
         
     Show-ProgressStatus -Message "STIG Rule ID: SV-78319r1_rule :: Enabling UAC for all administrators..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableLUA' -Type DWord -Value 1 -Force
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78087r2_rule :: FIlter Local administrator account privileged tokens..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "LocalAccountTokenFilterPolicy" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'LocalAccountTokenFilterPolicy' -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78307r1_rule :: Enabling User Account Control approval mode..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "FilterAdministratorToken" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'FilterAdministratorToken' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78307r1_rule :: Disabling enumerating elevated administator accounts..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI" -Name "EnumerateAdministrators" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI' -Name 'EnumerateAdministrators' -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "Enable All credential or consent prompting will occur on the interactive user's desktop..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "PromptOnSecureDesktop" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'PromptOnSecureDesktop' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "Enforce cryptographic signatures on any interactive application that requests elevation of privilege..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ValidateAdminCodeSignatures" -Type DWord -Value 0 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'ValidateAdminCodeSignatures' -Type DWord -Value 0 -Force -TryLGPO:$true
 
 
     If(!$OptimizeForVDI)
@@ -962,17 +974,17 @@ If($ApplySTIGItems )
     
         Show-ProgressStatus -Message "STIG Rule ID: SV-78093r6_rule :: Enabling Virtualization-based protection of code integrity..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         #https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-defender-exploit-guard/enable-virtualization-based-protection-of-code-integrity
-        Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name RequirePlatformSecurityFeatures -Type DWord -Value 1 -Force
-        Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name EnableVirtualizationBasedSecurity -Type DWord -Value 1 -Force
-        Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name Locked -Type DWord -Value 0 -Force
+        Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard' -Name 'RequirePlatformSecurityFeatures' -Type DWord -Value 1 -Force
+        Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard' -Name 'EnableVirtualizationBasedSecurity' -Type DWord -Value 1 -Force
+        Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard' -Name 'Locked' -Type DWord -Value 0 -Force
         If ($OSBuildNumber -lt 14393) {
-            Set-SystemSetting -Path "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name HypervisorEnforcedCodeIntegrity -Type DWord -Value 1 -Force
+            Set-SystemSetting -Path 'HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard' -Name 'HypervisorEnforcedCodeIntegrity' -Type DWord -Value 1 -Force
         }
-        Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Enabled -Type DWord -Value 1 -Force
-        Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name Locked -Type DWord -Value 0 -Force
+        Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Enabled' -Type DWord -Value 1 -Force
+        Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Locked' -Type DWord -Value 0 -Force
 
         Show-ProgressStatus -Message "STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-        Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name LsaCfgFlags -Type DWord -Value 1 -Force   
+        Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LsaCfgFlags' -Type DWord -Value 1 -Force   
     
         $DeviceGuardProperty = Get-CimInstance –ClassName Win32_DeviceGuard –Namespace root\Microsoft\Windows\DeviceGuard
         If($DeviceGuardProperty.VirtualizationBasedSecurityStatus -eq 1){
@@ -986,7 +998,7 @@ If($ApplySTIGItems )
     }
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-80171r3_rule :: Disable P2P WIndows Updates..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name DownloadMode -Type DWord -Value '0' -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name 'DownloadMode' -Type DWord -Value '0' -Force
 
 	switch($SetSmartScreenFilter){
         'Off'   {$value = 0;$label = "to Disable"}
@@ -995,17 +1007,17 @@ If($ApplySTIGItems )
         default {$value = 1;$label = "to Warning Users"}
     }
     Show-ProgressStatus -Message "Configuring Smart Screen Filte :: Configuring Smart Screen Filter $label..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableSmartScreen" -Type DWord -Value $value -Force -TryLGPO:$true
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "ShellSmartScreenLevel" -Type String -Value "Block" -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'EnableSmartScreen' -Type DWord -Value $value -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'ShellSmartScreenLevel' -Type String -Value "Block" -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78189r5_rule :: Enabling Smart Screen Filter warnings on Edge..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverride" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter' -Name 'PreventOverride' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78191r5_rule :: Prevent bypassing SmartScreen Filter warnings..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "PreventOverrideAppRepUnknown" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter' -Name 'PreventOverrideAppRepUnknown' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78191r5_rule :: Enabling SmartScreen filter for Microsoft Edge" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter" -Name "EnabledV9" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter' -Name 'EnabledV9' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78219r1_rule :: Disabling saved password for RDP..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'DisablePasswordSaving' -Value 1 -Force -TryLGPO:$true
@@ -1112,15 +1124,15 @@ If($ApplySTIGItems )
     #>
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78177r1_rule :: Disabling Caching of logon credentials" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'CachedLogonsCount' -Value 10 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'CachedLogonsCount' -Type String -Value 10 -Force
     
     If($OptimizeForVDI){
         Write-LogEntry "STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Force Logoff..." -Outhost
-        Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 2 -Force
+        Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'SCRemoveOption' -Type String -Value 2 -Force
     }
     Else{
         Write-LogEntry "STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Lock Workstation..." -Outhost
-        Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Type String -Name 'SCRemoveOption' -Value 1 -Force
+        Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'SCRemoveOption' -Type String -Value 1 -Force
     }
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-89399r1_rule :: Disabling Server Message Block (SMB) v1 Service ..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
@@ -1295,7 +1307,7 @@ If($ApplySTIGItems )
     Show-ProgressStatus -Message "STIG Rule ID: SV-77823r1_rule :: Disabling Automatically signing in the last interactive user after a system-initiated restart..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'DisableAutomaticRestartSignOn' -Value 0 -Force
 
-    Set-UserSetting -Message "STIG Rule ID: SV-78331r2_rule :: Perserving Zone information on attachments" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments" -Name SaveZoneInformation -Value 2 -Type DWord -Force -TryLGPO:$true
+    Set-UserSetting -Message "STIG Rule ID: SV-78331r2_rule :: Perserving Zone information on attachments" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments' -Name 'SaveZoneInformation' -Type DWord -Value 2 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-18420r1_rule :: Disabling File System's 8.3 Name Creation..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'NtfsDisable8dot3NameCreation' -Value 1 -Force
@@ -1318,8 +1330,8 @@ If($ApplySTIGItems )
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-85259r1_rule :: Disabling Windows PowerShell 2.0 Feature..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Try{
-        Disable-WindowsOptionalFeature -FeatureName MicrosoftWindowsPowerShellV2 -Online -NoRestart -ErrorAction Stop | Out-Null
-        Disable-WindowsOptionalFeature -FeatureName MicrosoftWindowsPowerShellV2Root -Online -NoRestart -ErrorAction Stop | Out-Null
+        Disable-WindowsOptionalFeature -FeatureName 'MicrosoftWindowsPowerShellV2' -Online -NoRestart -ErrorAction Stop | Out-Null
+        Disable-WindowsOptionalFeature -FeatureName 'MicrosoftWindowsPowerShellV2Root' -Online -NoRestart -ErrorAction Stop | Out-Null
     }
     Catch [System.Management.Automation.ActionPreferenceStopException]{
         Write-LogEntry ("Unable to remove PowerShellV2 Feature: {0}" -f $_) -Severity 3 -Outhost
@@ -1350,16 +1362,16 @@ If($ApplySTIGItems )
     #>
 
     Show-ProgressStatus -Message "Disabling LLMNR..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Type DWord -Value 0 -Force -TryLGPO:$true
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' -Name 'EnableMulticast' -Type DWord -Value 0 -Force -TryLGPO:$true
     
     Show-ProgressStatus -Message "Disabling NCSI active test..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator" -Name "NoActiveProbe" -Type DWord -Value 1 -Force -TryLGPO:$true
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator' -Name 'NoActiveProbe' -Type DWord -Value 1 -Force -TryLGPO:$true
 
 	Show-ProgressStatus -Message "Setting unknown networks profile to private..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-	Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\NetworkList\Signatures\010103000F0000F0010000000F0000F0C967A3643C3AD745950DA7859209176EF5B87C875FA20DF21951640E807D7C24" -Name "Category" -Type DWord -Value 1 -Force -TryLGPO:$true
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\NetworkList\Signatures\010103000F0000F0010000000F0000F0C967A3643C3AD745950DA7859209176EF5B87C875FA20DF21951640E807D7C24' -Name 'Category' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "Disabling automatic installation of network devices..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\NcdAutoSetup\Private" -Name "AutoSetup" -Type DWord -Value 0
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\NcdAutoSetup\Private' -Name 'AutoSetup' -Type DWord -Value 0
 }
 Else{$stepCounter++}
 
@@ -1373,7 +1385,7 @@ If($ApplyEMETMitigations)
 	Set-MpPreference -EnableControlledFolderAccess Disabled -ErrorAction SilentlyContinue
     
     Show-ProgressStatus -Message "Enabling Core Isolation Memory Integrity..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" -Name "Enabled" -Type DWord -Value 1 -Force
+    Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Enabled' -Type DWord -Value 1 -Force
 
     Show-ProgressStatus -Message "Enabling Windows Defender Application Guard..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 	Enable-WindowsOptionalFeature -online -FeatureName "Windows-Defender-ApplicationGuard" -NoRestart -WarningAction SilentlyContinue | Out-Null

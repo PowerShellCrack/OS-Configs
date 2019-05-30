@@ -49,7 +49,8 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOG
-        1.1.4 - May 28, 2019 - fixed FOD issue and messages    
+        1.1.4 - May 29, 2019 - fixed FOD issue and messages. fixed set-usersettings default users; fixed office detection
+                                resolved all VSC problems  
         1.1.3 - May 28, 2019 - fixed Get-SMSTSENV log path
         1.1.2 - May 24, 2019 - Removed IE customized settings
         1.1.1 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings  
@@ -223,7 +224,7 @@ Function Write-LogEntry{
         }
     }
     End{
-        If($Outhost){
+        If($Outhost -or $Global:OutTohost){
             If($Source){
                 $OutputMsg = ("[{0}] [{1}] :: {2}" -f $LogTimePlusBias,$Source,$Message)
             }
@@ -452,7 +453,15 @@ Function Set-SystemSetting {
                     
                     # build a unique output file
                     $LGPOfile = ($RegKeyHive + '-' + $RegKeyPath.replace('\','-').replace(' ','') + '-' + $RegKeyName.replace(' ','') + '.lgpo')
-            
+                    
+                    #Remove the Username or SID from Registry key path
+                    If($LGPOHive -eq 'User'){
+                        $UserID = $RegKeyPath.Split('\')[0]
+                        If($UserID -match "DEFAULT|S-1-5-21-(\d+-?){4}$"){
+                            $RegKeyPath = $RegKeyPath.Replace($UserID+"\","")
+                        }
+                    }
+
                     #complete LGPO file
                     Write-LogEntry ("LGPO applying [{3}] to registry: [{0}\{1}\{2}] as a Group Policy item" -f $RegHive,$RegKeyPath,$RegKeyName,$RegKeyName) -Severity 4 -Source ${CmdletName}
                     $lgpoout += "$LGPOHive`r`n"
@@ -519,7 +528,7 @@ Function Set-SystemSetting {
 
 
 Function Set-UserSetting {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='Medium')]
     Param (
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
         [Alias("Path")]
@@ -575,6 +584,13 @@ Function Set-UserSetting {
             $VerbosePreference = $PSCmdlet.SessionState.PSVariable.GetValue('VerbosePreference')
         }
 
+        if (-not $PSBoundParameters.ContainsKey('Confirm')) {
+            $ConfirmPreference = $PSCmdlet.SessionState.PSVariable.GetValue('ConfirmPreference')
+        }
+        if (-not $PSBoundParameters.ContainsKey('WhatIf')) {
+            $WhatIfPreference = $PSCmdlet.SessionState.PSVariable.GetValue('WhatIfPreference')
+        }
+
         #If user profile variable doesn't exist, build one
         If(!$Global:UserProfiles){
             # Get each user profile SID and Path to the profile
@@ -606,7 +622,7 @@ Function Set-UserSetting {
             'AllUsers'      {$RegHive = 'HKEY_USERS'; $ProfileList = $Global:UserProfiles}
             'CurrentUser'   {$RegHive = 'HKCU'      ; $ProfileList = ($Global:UserProfiles | Where-Object{$_.SID -eq $CurrentSID})}
             'DefaultUser'   {$RegHive = 'HKU'       ; $ProfileList = $DefaultProfile}
-            default         {$RegHive = $RegKeyHive ; $ProfileList = $null}
+            default         {$RegHive = $RegKeyHive ; $ProfileList = ($Global:UserProfiles | Where-Object{$_.SID -eq $CurrentSID})}
         }
         
         #check if hive is local machine.
@@ -651,13 +667,13 @@ Function Set-UserSetting {
                 
                 Try{
                     $objSID = New-Object System.Security.Principal.SecurityIdentifier($UserProfile.SID)
-                    $UserID = $objSID.Translate([System.Security.Principal.NTAccount]) 
+                    $UserName = $objSID.Translate([System.Security.Principal.NTAccount]) 
                 }
                 Catch{
-                    $UserID = $UserProfile.SID
+                    $UserName = $UserProfile.UserName
                 }
 
-                If($Message){Show-ProgressStatus -Message $Message -SubMessage ("for user profile ({0} of {1})" -f $p,$ProfileList.count) -Step $p -MaxStep $ProfileList.count}
+                If($Message){Show-ProgressStatus -Message $Message -SubMessage ("(Users: {0} of {1})" -f $p,$ProfileList.count) -Step $p -MaxStep $ProfileList.count}
 
                 #loadhive if not mounted
                 If (($HiveLoaded = Test-Path Registry::HKEY_USERS\$($UserProfile.SID)) -eq $false) {
@@ -666,12 +682,12 @@ Function Set-UserSetting {
                 }
 
                 If ($HiveLoaded -eq $true) {   
-                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserID)}
+                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserName)}
                     If($Remove){
-                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -ErrorAction SilentlyContinue | Out-Null  
+                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
                     }
                     Else{
-                        Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+                        Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -TryLGPO:$TryLGPO
                     }
                 }
 
@@ -685,12 +701,12 @@ Function Set-UserSetting {
             }
         }
         Else{
-            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ApplyTo)}
+            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ProfileList.UserName)}
             If($Remove){
-                Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -ErrorAction SilentlyContinue | Out-Null  
+                Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
             }
             Else{
-                Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -TryLGPO:$TryLGPO
+                Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -TryLGPO:$TryLGPO
             }
         }
 
@@ -747,15 +763,18 @@ Function Get-InstalledApplication {
 	)
 	
 	Begin {
-		## Get the name of this function and write header
-		[string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+		 ## Get the name of this function
+         [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+
+         #  Registry keys for native and WOW64 applications
+        [string[]]$regKeyApplications = 'HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
 	}
 	Process {
 		If ($name) {
-			Write-LogEntry -Message "Get information for installed Application Name(s) [$($name -join ', ')]..." -Source ${CmdletName} -Outhost:$Outhost
+			Write-LogEntry -Message "Get information for installed Application Name(s) [$($name -join ', ')]..." -Severity 4 -Source ${CmdletName} -Outhost:$Global:Verbose
 		}
 		If ($productCode) {
-			Write-LogEntry -Message "Get information for installed Product Code [$ProductCode]..." -Source ${CmdletName} -Outhost:$Outhost
+			Write-LogEntry -Message "Get information for installed Product Code [$ProductCode]..." -Severity 4 -Source ${CmdletName} -Outhost:$Global:Verbose
 		}
 		
 		## Enumerate the installed applications from the registry for applications that have the "DisplayName" property
@@ -769,14 +788,14 @@ Function Get-InstalledApplication {
 						If ($regKeyApplicationProps.DisplayName) { [psobject[]]$regKeyApplication += $regKeyApplicationProps }
 					}
 					Catch{
-						Write-LogEntry -Message "Unable to enumerate properties from registry key path [$($UninstallKeyApp.PSPath)]. `n$(Resolve-Error)" -Severity 2 -Source ${CmdletName} -Outhost:$Outhost
+						Write-LogEntry -Message "Unable to enumerate properties from registry key path [$($UninstallKeyApp.PSPath)]. `n$(Resolve-Error)" -Severity 2 -Source ${CmdletName} -Outhost:$Global:OutTohost
 						Continue
 					}
 				}
 			}
 		}
 		If ($ErrorUninstallKeyPath) {
-			Write-LogEntry -Message "The following error(s) took place while enumerating installed applications from the registry. `n$(Resolve-Error -ErrorRecord $ErrorUninstallKeyPath)" -Severity 2 -Source ${CmdletName} -Outhost:$Outhost
+			Write-LogEntry -Message "The following error(s) took place while enumerating installed applications from the registry. `n$(Resolve-Error -ErrorRecord $ErrorUninstallKeyPath)" -Severity 2 -Source ${CmdletName} -Outhost:$Global:OutTohost
 		}
 		
 		## Create a custom object with the desired properties for the installed applications and sanitize property details
@@ -806,7 +825,7 @@ Function Get-InstalledApplication {
 				If ($ProductCode) {
 					## Verify if there is a match with the product code passed to the script
 					If ($regKeyApp.PSChildName -match [regex]::Escape($productCode)) {
-						Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] matching product code [$productCode]." -Source ${CmdletName} -Outhost:$Outhost
+						Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] matching product code [$productCode]." -Source ${CmdletName} -Outhost
 						$installedApplication += New-Object -TypeName 'PSObject' -Property @{
 							UninstallSubkey = $regKeyApp.PSChildName
 							ProductCode = If ($regKeyApp.PSChildName -match $MSIProductCodeRegExPattern) { $regKeyApp.PSChildName } Else { [string]::Empty }
@@ -830,27 +849,27 @@ Function Get-InstalledApplication {
 							#  Check for an exact application name match
 							If ($regKeyApp.DisplayName -eq $application) {
 								$applicationMatched = $true
-								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using exact name matching for search term [$application]." -Source ${CmdletName}
+								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using exact name matching for search term [$application]." -Source ${CmdletName} -Outhost
 							}
 						}
 						ElseIf ($WildCard) {
 							#  Check for wildcard application name match
 							If ($regKeyApp.DisplayName -like $application) {
 								$applicationMatched = $true
-								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using wildcard matching for search term [$application]." -Source ${CmdletName}
+								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using wildcard matching for search term [$application]." -Source ${CmdletName} -Outhost
 							}
 						}
 						ElseIf ($RegEx) {
 							#  Check for a regex application name match
 							If ($regKeyApp.DisplayName -match $application) {
 								$applicationMatched = $true
-								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using regex matching for search term [$application]." -Source ${CmdletName}
+								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using regex matching for search term [$application]." -Source ${CmdletName} -Outhost
 							}
 						}
 						#  Check for a contains application name match
 						ElseIf ($regKeyApp.DisplayName -match [regex]::Escape($application)) {
 							$applicationMatched = $true
-							Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using contains matching for search term [$application]." -Source ${CmdletName}
+							Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using contains matching for search term [$application]." -Source ${CmdletName} -Outhost
 						}
 						
 						If ($applicationMatched) {
@@ -871,7 +890,7 @@ Function Get-InstalledApplication {
 				}
 			}
 			Catch {
-				Write-LogEntry -Message "Failed to resolve application details from registry for [$appDisplayName]. `n$(Resolve-Error)" -Severity 3 -Source ${CmdletName} -Outhost:$Outhost
+				Write-LogEntry -Message "Failed to resolve application details from registry for [$appDisplayName]. `n$(Resolve-Error)" -Severity 3 -Source ${CmdletName} -Outhost
 				Continue
 			}
 		}
@@ -892,8 +911,6 @@ $scriptPath = Get-ScriptPath
 [string]$scriptDirectory = Split-Path $scriptPath -Parent
 [string]$scriptName = Split-Path $scriptPath -Leaf
 [string]$scriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($scriptName)
-
-[int]$OSBuildNumber = (Get-WmiObject -Class Win32_OperatingSystem).BuildNumber
 
 #Create Paths
 $ToolsPath = Join-Path $scriptDirectory -ChildPath 'Tools'
@@ -964,17 +981,12 @@ Else{
     $UseLGPO = $false
 }
 
-# Get Onenote paths
-$OneNotePathx86 = Get-ChildItem "${env:ProgramFiles(x86)}" -Recurse -Filter "ONENOTE.EXE"
-$OneNotePathx64 = Get-ChildItem "$env:ProgramFiles" -Recurse -Filter "ONENOTE.EXE"
-If($OneNotePathx86){$OneNotePath = $OneNotePathx86}
-If($OneNotePathx64){$OneNotePath = $OneNotePathx64}
-
-$OfficeInstalled = Get-InstalledApplication "Microsoft Office" | Select -First 1
+$OfficeInstalled = Get-InstalledApplication "Microsoft Office Professional Plus" | Select-Object -First 1
 If($OfficeInstalled){
     If( $OfficeInstalled.Is64BitApplication ) {$OfficeLocation = $env:ProgramFiles} Else {$OfficeLocation = ${env:ProgramFiles(x86)}}
     $OfficeVersion = [string]([version]$OfficeInstalled.DisplayVersion).Major + '.' + [string]([version]$OfficeInstalled.DisplayVersion).Minor
     $OfficeFolder = 'Office' + [string]([version]$OfficeInstalled.DisplayVersion).Major
+    $OfficeTitle = [string]$OfficeInstalled.DisplayName
 }
 
 #if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
@@ -982,7 +994,7 @@ If(Get-SMSTSENV -NoWarning){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:Ap
 If((Get-SMSTSENV -NoWarning) -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
 
 #grab all Show-ProgressStatus commands in script and count them
-$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((gc $scriptPath), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
+$script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((Get-Content $scriptPath), [ref]$null) | Where-Object { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count
 #set counter to one
 $stepCounter = 1
 ##*===========================================================================
@@ -990,28 +1002,28 @@ $stepCounter = 1
 ##*===========================================================================
 
 If($EnableIESoftwareRender){
-    Set-UserSetting -Message "Enabling Software Rendering For IE" -Path "SOFTWARE\Microsoft\Internet Explorer\Main" -Name 'UseSWRender' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Enabling Software Rendering For IE" -Path 'SOFTWARE\Microsoft\Internet Explorer\Main' -Name 'UseSWRender' -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
 
 If ($DisableOfficeAnimation -and $OfficeInstalled){
-    Set-UserSetting -Message "Disabling OST Cache mode for Office 2016" -Path "SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\ost" -Name 'NoOST' -Type DWord -Value 2 -Force
-    Set-UserSetting -Message "Disabling Exchange cache mode for Office 2016" -Path "SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\cache mode" -Name 'Enable' -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "Disabling OST Cache mode for $OfficeTitle" -Path 'SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\ost' -Name 'NoOST' -Type DWord -Value 2 -Force
+    Set-UserSetting -Message "Disabling Exchange cache mode for $OfficeTitle" -Path 'SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\cache mode' -Name 'Enable' -Type DWord -Value 0 -Force
 }
 Else{$stepCounter++}
 
 
 If ($DisableOfficeAnimation -and $OfficeInstalled){
-    Set-UserSetting -Message "Disabling Hardware Acceleration for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics" -Name 'DisableHardwareAcceleration' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling Animation for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics" -Name 'DisableAnimation' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Boot for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun" -Name 'BootRTM' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Movie for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun" -Name 'DisableMovie' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Optin for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General" -Name 'showfirstrunoptin' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Optin for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\PTWatson" -Name 'PTWOption' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling CEIP for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common" -Name 'qmenable' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Accepting Eulas for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Registration" -Name 'AcceptAllEulas' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling Default File Types for Office 2016" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General" -Name 'ShownFileFmtPrompt' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Hardware Acceleration for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics' -Name 'DisableHardwareAcceleration' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Animation for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics' -Name 'DisableAnimation' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Boot for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun' -Name 'BootRTM' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Movie for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun' -Name 'DisableMovie' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Optin for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General' -Name 'showfirstrunoptin' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Optin for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\PTWatson' -Name 'PTWOption' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling CEIP for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common' -Name 'qmenable' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Accepting Eulas for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Registration' -Name 'AcceptAllEulas' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Default File Types for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General' -Name 'ShownFileFmtPrompt' -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
@@ -1019,7 +1031,7 @@ Else{$stepCounter++}
 
 If($EnableLyncStartup -and $OfficeInstalled)
 {
-    Set-UserSetting -Message "Enabling Skype for Business Startup" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "Lync" -Type String -Value """$OfficeLocation\Microsoft Office\Office16\lync.exe"" /fromrunkey" -Force
+    Set-UserSetting -Message "Enabling Skype for Business Startup" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name "Lync" -Type String -Value """$OfficeLocation\Microsoft Office\$OfficeFolder\lync.exe"" /fromrunkey" -Force
 }
 Else{$stepCounter++}
 
