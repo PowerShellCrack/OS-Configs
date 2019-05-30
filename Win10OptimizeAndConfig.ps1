@@ -1335,8 +1335,8 @@ If($DisableActionCenter)
 
     Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\ImmersiveShell" -Name "UseActionCenterExperience" -Type DWord -Value 0 -Force
     
-    Set-UserSetting -Message $CFGMessage -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "DisableNotificationCenter" -Type DWord -Value 1 -Force -TryLGPO:$true
-    Set-UserSetting -Message $CFGMessage -Path "HKEY_USERS\$($UserProfile.SID)\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "DisableNotificationCenter" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-UserSetting -Message $CFGMessage -Path "SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "DisableNotificationCenter" -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-UserSetting -Message $CFGMessage -Path "SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "DisableNotificationCenter" -Type DWord -Value 1 -Force -TryLGPO:$true
 
 }
 Else{$stepCounter++}
@@ -1348,8 +1348,8 @@ If($DisableFeedback)
     #Show-ProgressStatus -Message $CFGMessage -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:7] [Optional] :: "}
-    Set-UserSetting -Message ("{1}{0}" -f $CFGMessage,$prefixmsg) -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "NumberOfSIUFInPeriod" -Type DWord -Value 0 -Force
-    Set-UserSetting -Message ("{1}{0}" -f $CFGMessage,$prefixmsg) -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "PeriodInNanoSeconds" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message ("{1}{0}" -f $CFGMessage,$prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "NumberOfSIUFInPeriod" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message ("{1}{0}" -f $CFGMessage,$prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "PeriodInNanoSeconds" -Type DWord -Value 0 -Force
 
     Write-LogEntry "Disabling all feedback Scheduled Tasks..."
     Disable-ScheduledTask -TaskName "Microsoft\Windows\Feedback\Siuf\DmClient" -ErrorAction SilentlyContinue | Out-Null
@@ -1598,7 +1598,7 @@ If ($DisableOneDrive)
 
     Write-LogEntry "Disabling personal accounts for OneDrive synchronization..."
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisablePersonalSync' -Type DWord -Value '1' -Force
-    Set-UserSetting -Message 'Removing Onedrive' -RegPath "Software\Microsoft\Windows\CurrentVersion\Run" -Name 'OneDriveSetup' -Remove -Force
+    Set-UserSetting -Message 'Removing Onedrive' -RegPath "SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name 'OneDriveSetup' -Remove -Force
     
     #uninstall  OneDrive
     if (Test-Path "C:\Windows\System32\OneDriveSetup.exe"){
@@ -1631,7 +1631,7 @@ If ($DisableOneDrive)
 	Remove-Item -Path "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Recurse -ErrorAction SilentlyContinue
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:203] :: "}
-    Set-UserSetting -Message ("{0}Disabling Microsoft OneDrive startup run..." -f $prefixmsg) -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name OneDrive -Type Binary -Value 0300000064A102EF4C3ED101 -Force
+    Set-UserSetting -Message ("{0}Disabling Microsoft OneDrive startup run..." -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name OneDrive -Type Binary -Value 0300000064A102EF4C3ED101 -Force
     If ($OSBuildNumber -le 15063)
     {
         Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A52BBA46-E9E1-435f-B3D9-28DAA648C0F6}' -Recurse -ErrorAction SilentlyContinue
@@ -2363,7 +2363,7 @@ If ($ApplyPrivacyMitigations)
     Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\NcdAutoSetup\Private" -Name "AutoSetup" -Type DWord -Value 0 -Force
 
     Write-LogEntry "Privacy Mitigations :: Disabling customer experience improvement program..."
-	Set-SystemSetting -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
 
     Write-LogEntry "Privacy Mitigations :: Disabling sending settings to cloud..."
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync' -Name 'DisableSettingSync' -Type DWord -Value 2 -Force -TryLGPO:$true
@@ -2757,7 +2757,7 @@ If ($OptimizeForVDI)
     Set-SystemSetting -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense" -Name "AllowStorageSenseGlobal" -Type DWord -Value 0 -Force -TryLGPO:$true
 
     Write-LogEntry "VDI Optimizations [OSOT ID:32] :: Disabling customer experience improvement program..."
-	Set-SystemSetting -Path 'HKLM:\Software\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
+	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value '0' -Force
 
     Write-LogEntry "VDI Optimizations [OSOT ID:34] :: Enabling Automatically Reboot for the Crash Control"
     Set-SystemSetting -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl" -Name "AutoReboot" -Type DWord -Value 1 -Force
@@ -2876,8 +2876,8 @@ If ($OptimizeForVDI)
     Set-UserSetting -Message "VDI Optimizations :: Change Explorer Default View..." -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "LaunchTo" -Type DWord -Value 1 -Force 
     Set-UserSetting -Message "VDI Optimizations :: Settings Temporary Internet Files to Non Persistent" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache" -Name "Persistent" -Value 0 -Type DWord -Force
     Set-UserSetting -Message "VDI Optimizations [OSOT 11] :: Disable RSS Feeds" -Path "SOFTWARE\Microsoft\Feeds" -Name "SyncStatus" -Type DWord -Value 0 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackProgs" -Type DWord -Value 0 -Force
-    Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackDocs" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackProgs" -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackDocs" -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen" -Path "SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" -Name 'NoToastApplicationNotificationOnLockScreen' -Type DWord -Value '1' -Force
     Set-UserSetting -Message "VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People" -Name "PeopleBand" -Type DWord -Value 0 -Force
 
@@ -2947,7 +2947,7 @@ If($EnableVisualPerformance)
     Show-ProgressStatus -Message "Adjusting visual effects for performance" -Step ($stepCounter++) -MaxStep $script:Maxsteps	
 
     Write-LogEntry ("Disabling Checkbox selections on folders and files..." -f $prefixmsg)
-    Set-SystemSetting -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
+    Set-SystemSetting -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
     Write-LogEntry ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect..." -f $prefixmsg)
@@ -2981,7 +2981,7 @@ If($EnableVisualPerformance)
     
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:72] :: "}
     Set-UserSetting -Message ("{0}Setting Windows Visual Effects to Optimized for best performance" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Type DWord -Value 3 -Force
-    Set-UserSetting -Message ("{0}Disabling Checkbox selections on folders and files" -f $prefixmsg) -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("{0}Disabling Checkbox selections on folders and files" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name 'AutoCheckSelect' -Type DWord -Value '0' -Force
 
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:83] :: "}
 	Set-UserSetting -Message ("{0}Disabling Animate windows when minimizing and maxmizing Visual Effect" -f $prefixmsg) -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax" -Name 'DefaultValue' -Type DWord -Value '0' -Force
@@ -3045,17 +3045,17 @@ If($EnableVisualPerformance)
     Set-UserSetting -Message ("Enabling TaskBar Icons Only") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Type DWord -Value 1 -Force
     Set-UserSetting -Message ("Disabling Desktop Shortcut Icons") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideIcons" -Type DWord -Value 0 -Force   
     Set-UserSetting -Message ("Disabling Explorer Information Tip") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowInfoTip" -Type DWord -Value 0 -Force
-    Set-UserSetting -Message ("Disabling Combobox Slide Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Window Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Cursor Shadow") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Content while dragging") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Window shadows") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Listbox smooth scrolling") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Start Menu Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Windows Fade") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Themes") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\Themes" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling Thumbnails") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
-    Set-UserSetting -Message ("Disabling ToolTip Animations") -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Combobox Slide Animations") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Window Animations") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Cursor Shadow") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Content while dragging") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Window shadows") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Listbox smooth scrolling") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Start Menu Animations") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Windows Fade") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Themes") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\Themes" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling Thumbnails") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
+    Set-UserSetting -Message ("Disabling ToolTip Animations") -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation" -Name 'DefaultApplied' -Type DWord -Value '0' -Force
 }
 Else{$stepCounter++}
 
@@ -3168,7 +3168,7 @@ If ($DisableAppSuggestions)
         Write-LogEntry ("Disabling `"{0}`" option [{1}]..." -f $AdName,$key.Key)
 
         Show-ProgressStatus -Message "Disabling App Suggestions" -SubMessage ("Disabling: `"{2}`" ({0} of {1})" -f $i,$AppSuggestions.count,$AdName) -Step $i -MaxStep $AppSuggestions.count
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0
+        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0
 
         Set-UserSetting -Message "Disabling App Suggestion" -Path "SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name $key.Key -Type DWord -Value 0 -Force
         <#
