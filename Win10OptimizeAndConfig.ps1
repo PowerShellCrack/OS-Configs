@@ -1333,7 +1333,7 @@ Else{$stepCounter++}
 
 
 If($RemoveRebootOnLockScreen){
-    Write-LogEntry "Disabling Shutdown on Lock screen..."
+    Show-ProgressStatus -Message "Disabling Shutdown on Lock screen..." -Step ($stepCounter++) -MaxStep $script:Maxsteps
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'ShutdownWithoutLogon' -Type DWord -Value '0' -Force -TryLGPO:$true
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'DisablePasswordChange' -Type DWord -Value '1' -Force
 }
@@ -1344,7 +1344,7 @@ If($DisableActionCenter)
 {
     If($OptimizeForVDI){$prefixmsg = "VDI Optimizations [OSOT ID:45] :: "}
     $CFGMessage = "Disabling Windows Action Center Notifications"
-    Show-ProgressStatus -Message("{0}{1}" -f $prefixmsg,$CFGMessage) -MaxStep $script:Maxsteps
+    Show-ProgressStatus -Message("{0}{1}" -f $prefixmsg,$CFGMessage) -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\ImmersiveShell' -Name 'UseActionCenterExperience' -Type DWord -Value 0 -Force
     
@@ -1377,7 +1377,7 @@ Else{$stepCounter++}
 
 If($DisableWindowsUpgrades)
 {
-    Show-ProgressStatus -Message "Disabling Windows Upgrades from Windows Updates" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Show-ProgressStatus -Message "Disabling Windows Upgrades from Windows Updates..." -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Gwx' -Name 'DisableGwx' -Type DWord -Value 1 -Force | Out-Null
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' -Name 'DisableOSUpgrade' -Type DWord -Value 1 -Force | Out-Null
@@ -1390,7 +1390,7 @@ Else{$stepCounter++}
 
 If($DisableDriverUpdates)
 {
-    Show-ProgressStatus -Message "Disabling driver offering through Windows Update" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Show-ProgressStatus -Message "Disabling driver offering through Windows Update..." -Step ($stepCounter++) -MaxStep $script:Maxsteps
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Device Metadata' -Name 'PreventDeviceMetadataFromNetwork' -Type DWord -Value 1 -Force -TryLGPO:$true
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching' -Name 'DontPromptForWindowsUpdate' -Type DWord -Value 1 -Force -TryLGPO:$true
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching' -Name 'DontSearchWindowsUpdate' -Type DWord -Value 1 -Force -TryLGPO:$true
@@ -2085,14 +2085,12 @@ If($DisableSmartCardLogon){
     }
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'SCForeOption' -Type DWord -Value '0' -Force -TryLGPO:$true 
 }
-Else{
-
-    #> 
-    $stepCounter++
-}
+Else{$stepCounter++}
 
 
 If($ForceStrictSmartCardLogon){
+    Show-ProgressStatus -Message "Forcing smartcard login..." -Step ($stepCounter++) -MaxStep $script:Maxsteps
+
     Write-LogEntry "Change provider to default to smartcard login"
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SYSTEM\DefaultCredentialProvider' -Name 'SmartCardCredentialProvider' -Type String -Value '{8FD7E19C-3BF7-489B-A72C-846AB3678C96}' -Force -TryLGPO:$true  
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SmartCardCredentialProvider' -Name 'SmartCardCredentialProvider' -Type DWord -Value '1' -Force -TryLGPO:$true  
@@ -2154,7 +2152,7 @@ If($ForceStrictSmartCardLogon){
     Write-LogEntry "Disabling Password Login"
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{60b78e88-ead8-445c-9cfd-0b87f74ea6cd}' -Name 'Disabled' -Type DWord -Value '1' -Force
 }
-
+Else{$stepCounter++}
 
 If ($DisableDefender)
 {
@@ -2747,7 +2745,7 @@ Else{$stepCounter++}
 # ===================================
 If ($OptimizeForVDI)
 {
-    Show-ProgressStatus -Message "Configuring VDI Optimizations" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Show-ProgressStatus -Message "Configuring VDI Optimizations..." -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
 	
     Write-LogEntry "VDI Optimizations :: Hiding network options from Lock Screen..."
