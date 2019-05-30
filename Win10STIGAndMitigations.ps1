@@ -24,8 +24,8 @@
 
     .NOTES
         Author:         Richard Tracy
-        Last Update:    05/29/2019
-        Version:        2.1.4
+        Last Update:    05/30/2019
+        Version:        2.1.5
            
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
@@ -40,6 +40,7 @@
         #Add script to task sequence
 
     .LOGS
+        2.1.5 - May 30, 2019 - defaulted reg type to dword if not specified, standarized registry keys captalizations    
         2.1.4 - May 28, 2019 - fixed set-usersettings default users,resolved all VSC problems
         2.1.3 - May 28, 2019 - fixed Get-SMSTSENV log path
         2.1.2 - May 15, 2019 - Added Get-ScriptPpath function to support VScode and ISE; fixed Set-UserSettings   
@@ -109,7 +110,7 @@ Function Get-SMSTSENV{
         }
         catch{
             If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
-            If(!$NoWarning){Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode." -f $prefix)}
+            If(!$NoWarning){Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode" -f $prefix)}
             
             #set variable to null
             $Script:tsenv = $null
@@ -150,9 +151,9 @@ Function Get-SMSTSENV{
 
 Function Format-ElapsedTime($ts) {
     $elapsedTime = ""
-    if ( $ts.Minutes -gt 0 ){$elapsedTime = [string]::Format( "{0:00} min. {1:00}.{2:00} sec.", $ts.Minutes, $ts.Seconds, $ts.Milliseconds / 10 );}
-    else{$elapsedTime = [string]::Format( "{0:00}.{1:00} sec.", $ts.Seconds, $ts.Milliseconds / 10 );}
-    if ($ts.Hours -eq 0 -and $ts.Minutes -eq 0 -and $ts.Seconds -eq 0){$elapsedTime = [string]::Format("{0:00} ms.", $ts.Milliseconds);}
+    if ( $ts.Minutes -gt 0 ){$elapsedTime = [string]::Format( "{0:00} min. {1:00}.{2:00} sec", $ts.Minutes, $ts.Seconds, $ts.Milliseconds / 10 );}
+    else{$elapsedTime = [string]::Format( "{0:00}.{1:00} sec", $ts.Seconds, $ts.Milliseconds / 10 );}
+    if ($ts.Hours -eq 0 -and $ts.Minutes -eq 0 -and $ts.Seconds -eq 0){$elapsedTime = [string]::Format("{0:00} ms", $ts.Milliseconds);}
     if ($ts.Milliseconds -eq 0){$elapsedTime = [string]::Format("{0} ms", $ts.TotalMilliseconds);}
     return $elapsedTime
 }
@@ -174,7 +175,7 @@ Function Write-LogEntry{
         [ValidateSet(0,1,2,3,4)]
         [int16]$Severity,
 
-        [parameter(Mandatory=$false, HelpMessage="Name of the log file that the entry will written to.")]
+        [parameter(Mandatory=$false, HelpMessage="Name of the log file that the entry will written to")]
         [ValidateNotNullOrEmpty()]
         [string]$OutputLogFile = $Global:LogFilePath,
 
@@ -457,7 +458,7 @@ Function Set-SystemSetting {
             'DWord' {$LGPORegType = 'DWORD'}
             'QWord' {$LGPORegType = 'DWORD_BIG_ENDIAN'}
             'MultiString' {$LGPORegType = 'LINK'}
-            default {$LGPORegType = 'DWORD'}
+            default {$LGPORegType = 'DWORD';$Type = 'DWord'}
         }
 
         Try{
@@ -504,12 +505,12 @@ Function Set-SystemSetting {
                 }
             }
             Else{
-                Write-LogEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]...." -f $RegHive,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName}
+                Write-LogEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]" -f $RegHive,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName}
             }
         }
         Catch{
             If($TryLGPO -and $LGPOExe){
-                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]...." -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]" -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
             }
         }
         Finally
@@ -520,7 +521,7 @@ Function Set-SystemSetting {
             #verify the registry value has been set
             Try{
                 If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
-                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]...." -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
                     New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
                     New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
                 } 
@@ -675,7 +676,7 @@ Function Set-UserSetting {
             } 
         }
         Else{
-            Write-LogEntry ("User registry hive was not found or specified in Keypath [{0}]. Either use the -ApplyTo Switch or specify user hive [eg. HKCU\]..." -f $RegPath) -Severity 3 -Source ${CmdletName}
+            Write-LogEntry ("User registry hive was not found or specified in Keypath [{0}]. Either use the -ApplyTo Switch or specify user hive [eg. HKCU\]" -f $RegPath) -Severity 3 -Source ${CmdletName}
             return
         }
   
@@ -703,7 +704,7 @@ Function Set-UserSetting {
                 }
 
                 If ($HiveLoaded -eq $true) {   
-                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserName)}
+                    If($Message){Write-LogEntry ("{0} for User [{1}]" -f $Message,$UserName)}
                     If($Remove){
                         Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
                     }
@@ -722,7 +723,7 @@ Function Set-UserSetting {
             }
         }
         Else{
-            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ProfileList.UserName)}
+            If($Message){Write-LogEntry ("{0} for [{1}]" -f $Message,$ProfileList.UserName)}
             If($Remove){
                 Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
             }
@@ -758,7 +759,7 @@ $Global:Verbose = $false
 If($PSBoundParameters.ContainsKey('Debug') -or $PSBoundParameters.ContainsKey('Verbose')){
     $Global:Verbose = $PsBoundParameters.Get_Item('Verbose')
     $VerbosePreference = 'Continue'
-    Write-Verbose ("[{0}] [{1}] :: VERBOSE IS ENABLED." -f (Format-DatePrefix),$scriptName)
+    Write-Verbose ("[{0}] [{1}] :: VERBOSE IS ENABLED" -f (Format-DatePrefix),$scriptName)
 }
 Else{
     $VerbosePreference = 'SilentlyContinue'
@@ -829,71 +830,71 @@ $stepCounter = 1
 If($ApplySTIGItems )
 {
     
-    Show-ProgressStatus -Message "Applying STIG Items..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Applying STIG Items" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 
     If($OptimizeForVDI){
-        Write-LogEntry "Ignoring Stig Rule ID: SV-77813r4_rule :: Enabling TPM..." -Outhost
-        Write-LogEntry "Ignoring Stig Rule ID: SV-91779r3_rule :: Enabling UEFI..." -Outhost
-        Write-LogEntry "Ignoring Stig Rule ID: SV-91781r2_rule :: Enabling SecureBoot..." -Outhost
-        Write-LogEntry "Ignoring Stig Rule ID: SV-78085r5_rule :: Enabling Virtualization Based Security..." -Outhost
-        Write-LogEntry "Ignoring Stig Rule ID: SV-78089r7_rule :: Enabling Credential Guard..." -Outhost
-        Write-LogEntry "Ignoring Stig Rule ID: SV-78093r6_rule :: Enabling Virtualization-based protection of code integrity..." -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-77813r4_rule :: Enabling TPM" -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-91779r3_rule :: Enabling UEFI" -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-91781r2_rule :: Enabling SecureBoot" -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-78085r5_rule :: Enabling Virtualization Based Security" -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-78089r7_rule :: Enabling Credential Guard" -Outhost
+        Write-LogEntry "Ignoring Stig Rule ID: SV-78093r6_rule :: Enabling Virtualization-based protection of code integrity" -Outhost
     }
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-83411r1_rule :: Enabling Powershell Script Block Logging..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-83411r1_rule :: Enabling Powershell Script Block Logging" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' -Name 'EnableScriptBlockLogging' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "Applying STIG Items..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Applying STIG Items" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78039r1_rule :: Disabling Autorun for local volumes..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78039r1_rule :: Disabling Autorun for local volumes" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'NoAutoplayfornonVolume' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78161r1_rule :: Disabling Autorun for local machine..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78161r1_rule :: Disabling Autorun for local machine" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'NoAutorun' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78163r1_rule :: Disabling Autorun for local drive..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78163r1_rule :: Disabling Autorun for local drive" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'NoDriveTypeAutoRun' -Type DWord -Value 0xFF -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "Disabling Bluetooth..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Bluetooth" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-Bluetooth -DeviceStatus Off
 
     Show-ProgressStatus -Message "TIG Rule ID: SV-78301r1_rule :: Enabling FIPS Algorithm Policy" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM\System\CurrentControlSet\Control\Lsa\FIPSAlgorithmPolicy' -Name 'Enabled' -Type DWord -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-96851r1_rule :: Disabling personal accounts for OneDrive synchronization..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-96851r1_rule :: Disabling personal accounts for OneDrive synchronization" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OneDrive' -Name 'DisablePersonalSync' -Type DWord -Value '1' -Force -TryLGPO:$true
 
     # Privacy and mitigaton settings
     # See: https://docs.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78039r1_rule :: Privacy Mitigations :: Disabling Microsoft accounts for modern style apps..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78039r1_rule :: Privacy Mitigations :: Disabling Microsoft accounts for modern style apps" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'MSAOptional' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78035r1_rule :: Privacy Mitigations :: Disabling camera usage on user's lock screen..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78035r1_rule :: Privacy Mitigations :: Disabling camera usage on user's lock screen" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenCamera' -Type DWord -Value '1' -Force -TryLGPO:$true
 	
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78039r1_rule :: Privacy Mitigations :: Disabling lock screen slideshow..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78039r1_rule :: Privacy Mitigations :: Disabling lock screen slideshow" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Name 'NoLockScreenSlideshow' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-86395r2_rule :: Privacy Mitigations :: Disabling Consumer Features..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-86395r2_rule :: Privacy Mitigations :: Disabling Consumer Features" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableWindowsConsumerFeatures' -Type DWord -Value '1' -Force -TryLGPO:$true| Out-Null
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-89091r1_rule :: Privacy Mitigations :: Disabling Xbox features..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-89091r1_rule :: Privacy Mitigations :: Disabling Xbox features" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' -Name 'AllowGameDVR' -Type DWord -Value 0 -Force -TryLGPO:$true
 
-	Write-LogEntry ("STIG Rule ID: SV-78173r3_rule :: Privacy Mitigations :: {0}Disabling telemetry..." -f $prefixmsg) -Outhost
+	Write-LogEntry ("STIG Rule ID: SV-78173r3_rule :: Privacy Mitigations :: {0}Disabling telemetry" -f $prefixmsg) -Outhost
 	If ($OsCaption -like "*Enterprise*" -or $OsCaption -like "*Education*"){
 		$TelemetryLevel = "0"
-		Write-LogEntry "Privacy Mitigations :: Enterprise edition detected. Supported telemetry level: Security." -Outhost
+		Write-LogEntry "Privacy Mitigations :: Enterprise edition detected. Supported telemetry level: Security" -Outhost
 	}
 	Else{
 		$TelemetryLevel = "1"
-		Write-LogEntry "Privacy Mitigations :: Lowest supported telemetry level: Basic." -Outhost
+		Write-LogEntry "Privacy Mitigations :: Lowest supported telemetry level: Basic" -Outhost
 	}
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force -TryLGPO:$true
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value $TelemetryLevel -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-96859r1_rule: Disabling access the Insider build controls in the Advanced Options.." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-96859r1_rule: Disabling access the Insider build controls in the Advanced Options." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'LimitEnhancedDiagnosticDataWindowsAnalytics' -Type DWord -Value 1 -Force -TryLGPO:$true  
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-77825r1_rule :: Disabling Basic Authentication for WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
@@ -910,44 +911,44 @@ If($ApplySTIGItems )
     Show-ProgressStatus -Message "STIG Rule ID: SV-77831r1_rule :: Disabling Digest authentication for WinRM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service' -Name 'DisableRunAs' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78309r1_rule :: Enabling UAC prompt administrators for consent on the secure desktop..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78309r1_rule :: Enabling UAC prompt administrators for consent on the secure desktop" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorAdmin -Type DWord -Value 2 -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78311r1_rule :: Disabling elevation UAC prompt User for consent on the secure desktop..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78311r1_rule :: Disabling elevation UAC prompt User for consent on the secure desktop" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name ConsentPromptBehaviorUser -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC prompt detect application installations and prompt for elevation..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC prompt detect application installations and prompt for elevation" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableInstallerDetection' -Type DWord -Value 1 -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC UIAccess applications that are installed in secure locations..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78315r1_rule :: Enabling elevation UAC UIAccess applications that are installed in secure locations" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableSecureUAIPaths' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78321r1_rule :: Enabling Enable virtualize file and registry write failures to per-user locations.." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78321r1_rule :: Enabling Enable virtualize file and registry write failures to per-user locations." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableVirtualization' -Type DWord -Value 1 -Force -TryLGPO:$true
         
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78319r1_rule :: Enabling UAC for all administrators..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78319r1_rule :: Enabling UAC for all administrators" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'EnableLUA' -Type DWord -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78087r2_rule :: FIlter Local administrator account privileged tokens..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78087r2_rule :: FIlter Local administrator account privileged tokens" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'LocalAccountTokenFilterPolicy' -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78307r1_rule :: Enabling User Account Control approval mode..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78307r1_rule :: Enabling User Account Control approval mode" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'FilterAdministratorToken' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78307r1_rule :: Disabling enumerating elevated administator accounts..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78307r1_rule :: Disabling enumerating elevated administator accounts" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI' -Name 'EnumerateAdministrators' -Type DWord -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "Enable All credential or consent prompting will occur on the interactive user's desktop..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enable All credential or consent prompting will occur on the interactive user's desktop" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'PromptOnSecureDesktop' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "Enforce cryptographic signatures on any interactive application that requests elevation of privilege..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enforce cryptographic signatures on any interactive application that requests elevation of privilege" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'ValidateAdminCodeSignatures' -Type DWord -Value 0 -Force -TryLGPO:$true
 
 
     If(!$OptimizeForVDI)
     {
     
-        Write-LogEntry "STIG Rule ID: SV-78085r5_rule :: Enabling Virtualization Based Security..." -Outhost
+        Write-LogEntry "STIG Rule ID: SV-78085r5_rule :: Enabling Virtualization Based Security" -Outhost
     
         if ($OSBuildNumber -gt 14393) {
             try {
@@ -969,10 +970,10 @@ If($ApplySTIGItems )
             }
         }
 
-        Write-LogEntry "Enabling Windows Defender Application Guard..." -Outhost
+        Write-LogEntry "Enabling Windows Defender Application Guard" -Outhost
         Enable-WindowsOptionalFeature -online -FeatureName "Windows-Defender-ApplicationGuard" -NoRestart -WarningAction SilentlyContinue | Out-Null
     
-        Show-ProgressStatus -Message "STIG Rule ID: SV-78093r6_rule :: Enabling Virtualization-based protection of code integrity..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+        Show-ProgressStatus -Message "STIG Rule ID: SV-78093r6_rule :: Enabling Virtualization-based protection of code integrity" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         #https://docs.microsoft.com/en-us/windows/security/threat-protection/windows-defender-exploit-guard/enable-virtualization-based-protection-of-code-integrity
         Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard' -Name 'RequirePlatformSecurityFeatures' -Type DWord -Value 1 -Force
         Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard' -Name 'EnableVirtualizationBasedSecurity' -Type DWord -Value 1 -Force
@@ -983,7 +984,7 @@ If($ApplySTIGItems )
         Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Enabled' -Type DWord -Value 1 -Force
         Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Locked' -Type DWord -Value 0 -Force
 
-        Show-ProgressStatus -Message "STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+        Show-ProgressStatus -Message "STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LsaCfgFlags' -Type DWord -Value 1 -Force   
     
         $DeviceGuardProperty = Get-CimInstance –ClassName Win32_DeviceGuard –Namespace root\Microsoft\Windows\DeviceGuard
@@ -997,7 +998,7 @@ If($ApplySTIGItems )
         Set-MpPreference -EnableControlledFolderAccess Enabled -ErrorAction SilentlyContinue
     }
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-80171r3_rule :: Disable P2P WIndows Updates..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-80171r3_rule :: Disable P2P WIndows Updates" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' -Name 'DownloadMode' -Type DWord -Value '0' -Force
 
 	switch($SetSmartScreenFilter){
@@ -1006,109 +1007,109 @@ If($ApplySTIGItems )
         'admin' {$value = 2;$label = "to Require Admin approval"}
         default {$value = 1;$label = "to Warning Users"}
     }
-    Show-ProgressStatus -Message "Configuring Smart Screen Filte :: Configuring Smart Screen Filter $label..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Configuring Smart Screen Filte :: Configuring Smart Screen Filter $label" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'EnableSmartScreen' -Type DWord -Value $value -Force -TryLGPO:$true
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'ShellSmartScreenLevel' -Type String -Value "Block" -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78189r5_rule :: Enabling Smart Screen Filter warnings on Edge..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78189r5_rule :: Enabling Smart Screen Filter warnings on Edge" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter' -Name 'PreventOverride' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78191r5_rule :: Prevent bypassing SmartScreen Filter warnings..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78191r5_rule :: Prevent bypassing SmartScreen Filter warnings" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter' -Name 'PreventOverrideAppRepUnknown' -Type DWord -Value 1 -Force -TryLGPO:$true
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78191r5_rule :: Enabling SmartScreen filter for Microsoft Edge" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\PhishingFilter' -Name 'EnabledV9' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78219r1_rule :: Disabling saved password for RDP..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78219r1_rule :: Disabling saved password for RDP" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'DisablePasswordSaving' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78223r1_rule :: Forcing password prompt for RDP connections..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78223r1_rule :: Forcing password prompt for RDP connections" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fPromptForPassword' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78221r1_rule :: Preventing sharing of local drives with RDP Session Hosts..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78221r1_rule :: Preventing sharing of local drives with RDP Session Hosts" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fDisableCdm' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78221r1_rule :: Enabling RDP Session Hosts secure RPC communications..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78221r1_rule :: Enabling RDP Session Hosts secure RPC communications" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fEncryptRPCTraffic' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78221r1_rule :: Enabling RDP encryption level to High..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78221r1_rule :: Enabling RDP encryption level to High" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'MinEncryptionLevel' -Value 3 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78207r5_rule :: Enabling hardware security device requirement with Windows Hello..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78207r5_rule :: Enabling hardware security device requirement with Windows Hello" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork' -Name 'RequireSecurityDevice' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78211r5_rule :: Enabling minimum pin length of six characters or greater..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78211r5_rule :: Enabling minimum pin length of six characters or greater" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork\PINComplexity' -Name 'MinimumPINLength' -Value 6 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78107r1_rule :: Enabling Audit policy using subcategories..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78107r1_rule :: Enabling Audit policy using subcategories" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'SCENoApplyLegacyAuditPolicy' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78125r1_rule :: Disabling Local accounts with blank passwords..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78125r1_rule :: Disabling Local accounts with blank passwords" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LimitBlankPasswordUse' -Value 1 -Force
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78229r1_rule :: Disabling Anonymous SID/Name translation..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78229r1_rule :: Disabling Anonymous SID/Name translation" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'TurnOffAnonymousBlock' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78235r1_rule :: Disabling Anonymous enumeration of SAM accounts..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78235r1_rule :: Disabling Anonymous enumeration of SAM accounts" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'RestrictAnonymousSAM' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78239r1_rule :: Disabling Anonymous enumeration of shares..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78239r1_rule :: Disabling Anonymous enumeration of shares" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'RestrictAnonymous' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-86393r3_rule :: Restricting Remote calls to the Security Account Manager (SAM) to Administrators..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-86393r3_rule :: Restricting Remote calls to the Security Account Manager (SAM) to Administrators" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'RestrictRemoteSAM' -Type String -Value "O:BAG:BAD:(A;;RC;;;BA)" -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78253r1_rule :: Restricting Services using Local System that use Negotiate when reverting to NTLM authentication..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78253r1_rule :: Restricting Services using Local System that use Negotiate when reverting to NTLM authentication" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'UseMachineId' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78245r1_rule :: Disabling prevent anonymous users from having the same rights as the Everyone group..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
-    Show-ProgressStatus -Message "STIG Rule ID: SV-77863r2_rule :: Disabling Let everyone permissions apply to anonymous users..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78245r1_rule :: Disabling prevent anonymous users from having the same rights as the Everyone group" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-77863r2_rule :: Disabling Let everyone permissions apply to anonymous users" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'EveryoneIncludesAnonymous' -Value 0 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78255r1_rule :: Disabling NTLM from falling back to a Null session..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78255r1_rule :: Disabling NTLM from falling back to a Null session" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\LSA\MSV1_0' -Name 'allownullsessionfallback' -Value 0 -Force
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78295r1_rule :: Disabling requirement for NTLM SSP based clients" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\LSA\MSV1_0' -Name 'NTLMMinClientSec' -Value 0 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78257r1_rule :: Disabling PKU2U authentication using online identities..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78257r1_rule :: Disabling PKU2U authentication using online identities" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\LSA\pku2u' -Name 'AllowOnlineID' -Value 0 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78285r1_rule :: Disabling Kerberos encryption types DES and RC4..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78285r1_rule :: Disabling Kerberos encryption types DES and RC4" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters' -Type DWord -Name 'SupportedEncryptionTypes' -Value 0x7ffffff8 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78287r1_rule :: Disabling LAN Manager hash of passwords for storage..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78287r1_rule :: Disabling LAN Manager hash of passwords for storage" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'NoLMHash' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID:  SV-78291r1_rule :: Disabling NTLMv2 response only, and to refuse LM and NTLM..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID:  SV-78291r1_rule :: Disabling NTLMv2 response only, and to refuse LM and NTLM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'LmCompatibilityLevel' -Value 5 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78293r1_rule :: Enabling LDAP client signing level..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78293r1_rule :: Enabling LDAP client signing level" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LDAP' -Name 'LDAPClientIntegrity' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78129r1_rule :: Enabling Outgoing secure channel traffic encryption or signature..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78129r1_rule :: Enabling Outgoing secure channel traffic encryption or signature" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'RequireSignOrSeal' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78133r1_rule :: Enabling Outgoing secure channel traffic encryption when possible..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78133r1_rule :: Enabling Outgoing secure channel traffic encryption when possible" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'SealSecureChannel' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78137r1_rule :: Enabling Outgoing secure channel traffic encryption when possible..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78137r1_rule :: Enabling Outgoing secure channel traffic encryption when possible" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'SignSecureChannel' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78143r1_rule :: Disabling the ability to reset computer account password..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78143r1_rule :: Disabling the ability to reset computer account password" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'DisablePasswordChange' -Value 1 -Force
     
-    Show-ProgressStatus -Message "STIG Rule ID:  SV-78151r1_rule :: Configuring maximum age for machine account password to 30 days..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID:  SV-78151r1_rule :: Configuring maximum age for machine account password to 30 days" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'MaximumPasswordAge' -Value 30 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78155r1_rule :: Configuring strong session key for machine account password..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78155r1_rule :: Configuring strong session key for machine account password" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'RequireStrongKey' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78159r2_rule :: Configuring machine inactivity limit must be set to 15 minutes..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78159r2_rule :: Configuring machine inactivity limit must be set to 15 minutes" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'InactivityTimeoutSecs' -Value 900 -Force -TryLGPO:$true
 
     <#
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78165r2_rule :: Configuring legal notice logon notification..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78165r2_rule :: Configuring legal notice logon notification" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Type String -Name LegalNoticeText -Value ("`
         You are accessing a U.S. Government (USG) Information System (IS) that is provided for USG-authorized use only.`
         By using this IS (which includes any device attached to this IS), you consent to the following conditions:`
@@ -1116,10 +1117,10 @@ If($ApplySTIGItems )
         -At any time, the USG may inspect and seize data stored on this IS.`
         -Communications using, or data stored on, this IS are not private, are subject to routine monitoring, interception, and search, and may be disclosed or used for any USG-authorized purpose.`
         -This IS includes security measures (e.g., authentication and access controls) to protect USG interests--not for your personal benefit or privacy.`
-        -Notwithstanding the above, using this IS does not constitute consent to PM, LE or CI investigative searching or monitoring of the content of privileged communications, or work product, related to personal representation or services by attorneys, psychotherapists, or clergy, and their assistants. Such communications and work product are private and confidential. See User Agreement for details.")`
+        -Notwithstanding the above, using this IS does not constitute consent to PM, LE or CI investigative searching or monitoring of the content of privileged communications, or work product, related to personal representation or services by attorneys, psychotherapists, or clergy, and their assistants. Such communications and work product are private and confidential. See User Agreement for details")`
      -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78171r1_rule :: Configuring legal notice logon title box..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78171r1_rule :: Configuring legal notice logon title box" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Type String -Name LegalNoticeCaption -Value "DoD Notice and Consent Banner" -Force -TryLGPO:$true
     #>
 
@@ -1127,15 +1128,15 @@ If($ApplySTIGItems )
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'CachedLogonsCount' -Type String -Value 10 -Force
     
     If($OptimizeForVDI){
-        Write-LogEntry "STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Force Logoff..." -Outhost
+        Write-LogEntry "STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Force Logoff" -Outhost
         Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'SCRemoveOption' -Type String -Value 2 -Force
     }
     Else{
-        Write-LogEntry "STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Lock Workstation..." -Outhost
+        Write-LogEntry "STIG Rule ID: SV-78187r1_rule :: Configuring Smart Card removal to Lock Workstation" -Outhost
         Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'SCRemoveOption' -Type String -Value 1 -Force
     }
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-89399r1_rule :: Disabling Server Message Block (SMB) v1 Service ..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-89399r1_rule :: Disabling Server Message Block (SMB) v1 Service " -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\mrxsmb10' -Name 'Start' -Value 4 -Force
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-89393r1_rule :: Disabling Secondary Logon service" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
@@ -1159,40 +1160,40 @@ If($ApplySTIGItems )
     Show-ProgressStatus -Message "STIG Rule ID: SV-89089r2_rule :: Preventing Microsoft Edge browser data from being cleared on exit" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Privacy' -Name 'ClearBrowsingHistoryOnExit' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-83445r4_rule :: Disabling Session Kernel Exception Chain Validation..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-83445r4_rule :: Disabling Session Kernel Exception Chain Validation" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel' -Name 'DisableExceptionChainValidation' -Value 0 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78045r1_rule/SV-78049r1_rule :: Setting IPv6 source routing to highest protection..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78045r1_rule/SV-78049r1_rule :: Setting IPv6 source routing to highest protection" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters' -Name 'DisableIpSourceRouting' -Value 2 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78053r1_rule :: Disabling ICMP redirects from overriding Open Shortest Path First (OSPF) generated routes..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78053r1_rule :: Disabling ICMP redirects from overriding Open Shortest Path First (OSPF) generated routes" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'EnableICMPRedirect' -Value 0 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78057r1_rule :: Disabling NetBIOS name release requests except from WINS servers..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78057r1_rule :: Disabling NetBIOS name release requests except from WINS servers" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netbt\Parameters' -Name 'NoNameReleaseOnDemand' -Value 1 -Force
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-86387r1_rule :: Disabling WDigest Authentication..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-86387r1_rule :: Disabling WDigest Authentication" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\Wdigest' -Name 'UseLogonCredential' -Value 0 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-86953r1_rule :: Removing Run as different user contect menu..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-86953r1_rule :: Removing Run as different user contect menu" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Classes\batfile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Classes\cmdfile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Classes\exefile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Classes\mscfile\shell\runasuser' -Name 'SuppressionPolicy' -Value 4096 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78059r2_rule :: Disabling insecure logons to an SMB server..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78059r2_rule :: Disabling insecure logons to an SMB server" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation' -Name 'AllowInsecureGuestAuth' -Value 0 -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78193r1_rule :: Enabling SMB packet signing..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78193r1_rule :: Enabling SMB packet signing" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\Parameters' -Name 'RequireSecuritySignature' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78197r1_rule :: Enabling SMB packet signing when possible..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78197r1_rule :: Enabling SMB packet signing when possible" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\Parameters' -Name 'EnableSecuritySignature' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78201r1_rule :: Disabling plain text password on SMB Servers..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78201r1_rule :: Disabling plain text password on SMB Servers" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation\Parameters' -Name 'EnablePlainTextPassword' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-85261r2_rule :: Disabling Server Message Block (SMB) v1 on Server..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-85261r2_rule :: Disabling Server Message Block (SMB) v1 on Server" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Try{
         Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
         #Set-SmbServerConfiguration -EnableSMB2Protocol $false -Force
@@ -1204,115 +1205,115 @@ If($ApplySTIGItems )
 
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -Name 'SMB1' -Value 0 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78209r1_rule :: Enabling SMB Server packet signing..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78209r1_rule :: Enabling SMB Server packet signing" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanManServer\Parameters' -Name 'RequireSecuritySignature' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78213r1_rule :: Enabling SMB Srver packet signing when possible..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78213r1_rule :: Enabling SMB Srver packet signing when possible" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanManServer\Parameters' -Name 'EnableSecuritySignature' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78249r1_rule :: Disabling  Anonymous access to Named Pipes and Shares..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78249r1_rule :: Disabling  Anonymous access to Named Pipes and Shares" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanManServer\Parameters' -Name 'RestrictNullSessAccess' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-86389r1_rule :: Disabling Internet connection sharing..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-86389r1_rule :: Disabling Internet connection sharing" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections' -Name 'NC_ShowSharedAccessUI' -Value 0 -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78067r1_rule :: Disabling Internet connection sharing..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78067r1_rule :: Disabling Internet connection sharing" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths' -Name '\\*\NETLOGON' -Type String -Value "RequireMutualAuthentication=1, RequireIntegrity=1" -Force -TryLGPO:$true
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkProvider\HardenedPaths' -Name '\\*\SYSVOL' -Type String -Value "RequireMutualAuthentication=1, RequireIntegrity=1" -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-89087r1_rule :: Enabling prioritize ECC Curves with longer key lengths..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-89087r1_rule :: Enabling prioritize ECC Curves with longer key lengths" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Cryptography\Configuration\SSL\00010002' -Name 'EccCurves' -Type MultiString -Value "NistP384 NistP256" -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78071r2_rule :: Limiting simultaneous connections to the Internet or a Windows domain..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78071r2_rule :: Limiting simultaneous connections to the Internet or a Windows domain" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\GroupPolicy' -Name 'fMinimizeConnections' -Value 1 -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78075r1_rule :: Limiting simultaneous connections to the Internet or a Windows domain..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78075r1_rule :: Limiting simultaneous connections to the Internet or a Windows domain" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\GroupPolicy' -Name 'fBlockNonDomain' -Value 1 -Force -TryLGPO:$true
    
-    Show-ProgressStatus -Message "STIG Rule ID: SV-83409r1_rule :: Enabling event logging for command line ..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-83409r1_rule :: Enabling event logging for command line " -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit' -Name 'ProcessCreationIncludeCmdLine_Enabled' -Value 1 -Force -TryLGPO:$true
 	
-    Show-ProgressStatus -Message "STIG Rule ID: SV-89373r1_rule :: Enabling Remote host allows delegation of non-exportable credentials..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-89373r1_rule :: Enabling Remote host allows delegation of non-exportable credentials" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation' -Name 'AllowProtectedCreds' -Value 1 -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78097r1_rule :: Disabling Early Launch Antimalware, Boot-Start Driver Initialization Policy..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78097r1_rule :: Disabling Early Launch Antimalware, Boot-Start Driver Initialization Policy" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Policies\EarlyLaunch' -Name 'DriverLoadPolicy' -Value 8 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78099r1_rule :: Enabling Group Policy objects reprocessing..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78099r1_rule :: Enabling Group Policy objects reprocessing" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Group Policy\{35378EAC-683F-11D2-A89A-00C04FBBCFA2}' -Name 'NoGPOListChanges' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78105r1_rule :: Disablng Downloading print driver packages over HTTP..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78105r1_rule :: Disablng Downloading print driver packages over HTTP" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers' -Name 'DisableWebPnPDownload' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78111r1_rule :: Disablng Web publishing and online ordering wizards..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78111r1_rule :: Disablng Web publishing and online ordering wizards" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name 'NoWebServices' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78113r1_rule :: Disablng Printing over HTTP..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78113r1_rule :: Disablng Printing over HTTP" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Printers' -Name 'DisableHTTPPrinting' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78117r1_rule :: Enabling device authentication using certificates if possible..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78117r1_rule :: Enabling device authentication using certificates if possible" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters' -Name 'DevicePKInitEnabled' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78119r1_rule :: Disabling network selection user interface (UI) on the logon screen..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78119r1_rule :: Disabling network selection user interface (UI) on the logon screen" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'DontDisplayNetworkSelectionUI' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78123r1_rule :: Disabling local user enumerating..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78123r1_rule :: Disabling local user enumerating" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'EnumerateLocalUsers' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78135r1_rule :: Enabling users must be prompted for a password on resume from sleep (on battery)..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78135r1_rule :: Enabling users must be prompted for a password on resume from sleep (on battery)" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51' -Name 'DCSettingIndex' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78139r1_rule :: Enabling users must be prompted for a password on resume from sleep (on battery)..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78139r1_rule :: Enabling users must be prompted for a password on resume from sleep (on battery)" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51' -Name 'ACSettingIndex' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78141r1_rule :: Disabling Solicited Remote Assistance..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78141r1_rule :: Disabling Solicited Remote Assistance" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name 'fAllowToGetHelp' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78147r1_rule :: Disabling Unauthenticated RPC clients..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78147r1_rule :: Disabling Unauthenticated RPC clients" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Rpc' -Name 'RestrictRemoteClients' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78149r2_rule :: Disabling Microsoft accounts for modern style apps..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78149r2_rule :: Disabling Microsoft accounts for modern style apps" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'MSAOptional' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78167r3_rule :: Enabling enhanced anti-spoofing for facial recognition..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78167r3_rule :: Enabling enhanced anti-spoofing for facial recognition" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Biometrics\FacialFeatures' -Name 'EnhancedAntiSpoofing' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-96853r1_rule :: Preventing certificate error overrides in Microsoft Edge..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-96853r1_rule :: Preventing certificate error overrides in Microsoft Edge" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name 'PreventCertErrorOverrides' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78195r4_rule :: Disabling InPrivate browsing in Microsoft Edge..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78195r4_rule :: Disabling InPrivate browsing in Microsoft Edge" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'AllowInPrivate' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78195r4_rule :: Disabling password manager in Microsoft Edge..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78195r4_rule :: Disabling password manager in Microsoft Edge" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main' -Name 'FormSuggest Passwords' -Type String -Value "no" -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78233r1_rule :: Disabling attachments from RSS feeds..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78233r1_rule :: Disabling attachments from RSS feeds" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Feeds' -Name 'DisableEnclosureDownload' -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78237r1_rule :: Disabling Basic authentication to RSS feeds..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78237r1_rule :: Disabling Basic authentication to RSS feeds" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Feeds' -Name 'AllowBasicAuthInClear' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-78241r1_rule :: Disabling indexing of encrypted files..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78241r1_rule :: Disabling indexing of encrypted files" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowIndexingEncryptedStoresOrItems' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-77811r1_rule :: Disabling changing installation options for users..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-77811r1_rule :: Disabling changing installation options for users" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name 'EnableUserControl' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-77815r1_rule :: Disabling Windows Installer installation with elevated privileges..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-77815r1_rule :: Disabling Windows Installer installation with elevated privileges" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name 'AlwaysInstallElevated' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-77819r1_rule :: Enabling notification if a web-based program attempts to install..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-77819r1_rule :: Enabling notification if a web-based program attempts to install" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer' -Name 'SafeForScripting' -Value 0 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-77823r1_rule :: Disabling Automatically signing in the last interactive user after a system-initiated restart..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-77823r1_rule :: Disabling Automatically signing in the last interactive user after a system-initiated restart" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'DisableAutomaticRestartSignOn' -Value 0 -Force
 
     Set-UserSetting -Message "STIG Rule ID: SV-78331r2_rule :: Perserving Zone information on attachments" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Attachments' -Name 'SaveZoneInformation' -Type DWord -Value 2 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-18420r1_rule :: Disabling File System's 8.3 Name Creation..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-18420r1_rule :: Disabling File System's 8.3 Name Creation" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'NtfsDisable8dot3NameCreation' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-77873r1_rule :: Disabling Simple TCP/IP Services and Feature..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-77873r1_rule :: Disabling Simple TCP/IP Services and Feature" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Try{
         Disable-WindowsOptionalFeature -FeatureName SimpleTCP -Online -NoRestart -ErrorAction Stop | Out-Null
     }
@@ -1320,7 +1321,7 @@ If($ApplySTIGItems )
         Write-LogEntry ("Unable to remove Simple TCP/IP Feature: {0}" -f $_) -Severity 3 -Outhost
     }
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-77875r1_rule :: Disabling Telnet Client Feature..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-77875r1_rule :: Disabling Telnet Client Feature" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Try{
         Disable-WindowsOptionalFeature -FeatureName TelnetClient -Online -NoRestart -ErrorAction Stop | Out-Null
     }
@@ -1328,7 +1329,7 @@ If($ApplySTIGItems )
         Write-LogEntry ("Unable to remove TelnetClient: {0}" -f $_) -Severity 3 -Outhost
     }
 
-    Show-ProgressStatus -Message "STIG Rule ID: SV-85259r1_rule :: Disabling Windows PowerShell 2.0 Feature..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-85259r1_rule :: Disabling Windows PowerShell 2.0 Feature" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Try{
         Disable-WindowsOptionalFeature -FeatureName 'MicrosoftWindowsPowerShellV2' -Online -NoRestart -ErrorAction Stop | Out-Null
         Disable-WindowsOptionalFeature -FeatureName 'MicrosoftWindowsPowerShellV2Root' -Online -NoRestart -ErrorAction Stop | Out-Null
@@ -1337,23 +1338,23 @@ If($ApplySTIGItems )
         Write-LogEntry ("Unable to remove PowerShellV2 Feature: {0}" -f $_) -Severity 3 -Outhost
     }
 
-    #Show-ProgressStatus -Message "STIG Rule ID: SV-78069r4_rule :: DoD Root CA certificates must be installed in the Trusted Root Store..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    #Show-ProgressStatus -Message "STIG Rule ID: SV-78069r4_rule :: DoD Root CA certificates must be installed in the Trusted Root Store" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     #Get-ChildItem -Path Cert:Localmachine\root | Where Subject -Like "*DoD*" | FL Subject, Thumbprint, NotAfter
 
-    #Show-ProgressStatus -Message "STIG Rule ID: SV-78073r3_rule :: External Root CA certificates must be installed in the Trusted Root Store on unclassified systems..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    #Show-ProgressStatus -Message "STIG Rule ID: SV-78073r3_rule :: External Root CA certificates must be installed in the Trusted Root Store on unclassified systems" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     #Get-ChildItem -Path Cert:Localmachine\root | Where Subject -Like "*ECA*" | FL Subject, Thumbprint, NotAfter
 
-    #Show-ProgressStatus -Message "STIG Rule ID: SV-78077r4_rule :: DoD Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systemss..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    #Show-ProgressStatus -Message "STIG Rule ID: SV-78077r4_rule :: DoD Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systemss" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     #Get-ChildItem -Path Cert:Localmachine\disallowed | Where {$_.Issuer -Like "*DoD Interoperability*" -and $_.Subject -Like "*DoD*"} | FL Subject, Issuer, Thumbprint, NotAfter
     
-    #Show-ProgressStatus -Message "STIG Rule ID: SV-78079r3_rule :: US DoD CCEB Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systems." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    #Show-ProgressStatus -Message "STIG Rule ID: SV-78079r3_rule :: US DoD CCEB Interoperability Root CA cross-certificates must be installed in the Untrusted Certificates Store on unclassified systems" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     #Get-ChildItem -Path Cert:Localmachine\disallowed | Where Issuer -Like "*CCEB Interoperability*" | FL Subject, Issuer, Thumbprint, NotAfter
     
-    #Show-ProgressStatus -Message "Clearing Session Subsystem's..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    #Show-ProgressStatus -Message "Clearing Session Subsystem's" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     #Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems' -Name 'Optional' -Type MultiString -Value "" -Force
 
     <#
-    Show-ProgressStatus -Message "Disabling RASMAN PPP Parameters..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling RASMAN PPP Parameters" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'DisableSavePassword' -Value 1 -Force
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\Parameters' -Name 'Logging' -Value 1 -Force
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'ForceEncryptedData' -Value 1 -Force
@@ -1361,16 +1362,16 @@ If($ApplySTIGItems )
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\RasMan\PPP' -Name 'SecureVPN' -Value 1 -Force
     #>
 
-    Show-ProgressStatus -Message "Disabling LLMNR..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling LLMNR" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' -Name 'EnableMulticast' -Type DWord -Value 0 -Force -TryLGPO:$true
     
-    Show-ProgressStatus -Message "Disabling NCSI active test..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling NCSI active test" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator' -Name 'NoActiveProbe' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-	Show-ProgressStatus -Message "Setting unknown networks profile to private..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+	Show-ProgressStatus -Message "Setting unknown networks profile to private" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\NetworkList\Signatures\010103000F0000F0010000000F0000F0C967A3643C3AD745950DA7859209176EF5B87C875FA20DF21951640E807D7C24' -Name 'Category' -Type DWord -Value 1 -Force -TryLGPO:$true
 
-    Show-ProgressStatus -Message "Disabling automatic installation of network devices..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling automatic installation of network devices" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\NcdAutoSetup\Private' -Name 'AutoSetup' -Type DWord -Value 0
 }
 Else{$stepCounter++}
@@ -1378,41 +1379,41 @@ Else{$stepCounter++}
 
 If($ApplyEMETMitigations)
 {
-    Show-ProgressStatus -Message "Enabling Controlled Folder Access..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling Controlled Folder Access" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-MpPreference -EnableControlledFolderAccess Enabled -ErrorAction SilentlyContinue
     
-    Show-ProgressStatus -Message "Disabling Controlled Folder Access..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Disabling Controlled Folder Access" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 	Set-MpPreference -EnableControlledFolderAccess Disabled -ErrorAction SilentlyContinue
     
-    Show-ProgressStatus -Message "Enabling Core Isolation Memory Integrity..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling Core Isolation Memory Integrity" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Enabled' -Type DWord -Value 1 -Force
 
-    Show-ProgressStatus -Message "Enabling Windows Defender Application Guard..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Enabling Windows Defender Application Guard" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
 	Enable-WindowsOptionalFeature -online -FeatureName "Windows-Defender-ApplicationGuard" -NoRestart -WarningAction SilentlyContinue | Out-Null
 
     if ($OSBuildNumber -gt 17763) {
 
-        Show-ProgressStatus -Message "STIG Rule ID: SV-91787r3_rule :: Enabling Data Execution Prevention (DEP) for exploit protection..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+        Show-ProgressStatus -Message "STIG Rule ID: SV-91787r3_rule :: Enabling Data Execution Prevention (DEP) for exploit protection" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         If((Get-ProcessMitigation -System).DEP.Enable -eq "OFF"){
               Set-Processmitigation -System -Enable DEP
         }
 
-        Show-ProgressStatus -Message "STIG Rule ID: SV-91791r4_rule :: Enabling (Bottom-Up ASLR) for exploit protection..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+        Show-ProgressStatus -Message "STIG Rule ID: SV-91791r4_rule :: Enabling (Bottom-Up ASLR) for exploit protection" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         If((Get-ProcessMitigation -System).ASLR.BottomUp -eq "OFF"){
             Set-Processmitigation -System -Enable BottomUp
         }
 
-        Show-ProgressStatus -Message "STIG Rule ID: SV-91793r3_rule :: Enabling Control flow guard (CFG) for exploit protection..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+        Show-ProgressStatus -Message "STIG Rule ID: SV-91793r3_rule :: Enabling Control flow guard (CFG) for exploit protection" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
             Set-Processmitigation -System -Enable CFG
         }
 
-        Show-ProgressStatus -Message "STIG Rule ID: SV-91797r3_rule :: Enabling Validate exception chains (SEHOP) for exploit protection..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+        Show-ProgressStatus -Message "STIG Rule ID: SV-91797r3_rule :: Enabling Validate exception chains (SEHOP) for exploit protection" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
             Set-Processmitigation -System -Enable SEHOP
         }
 
-        Show-ProgressStatus -Message "STIG Rule ID: SV-91799r3_rule :: Enabling Validate heap integrity for exploit protection..." -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+        Show-ProgressStatus -Message "STIG Rule ID: SV-91799r3_rule :: Enabling Validate heap integrity for exploit protection" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
         If((Get-ProcessMitigation -System).CFG.Enable -eq "OFF"){
             Set-Processmitigation -System -Enable TerminateOnError
         }
@@ -1527,35 +1528,35 @@ If($ApplyEMETMitigations)
         }
 
         Foreach ($Mitigation in $ApplicationMitigationsDep.GetEnumerator()){
-            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DEP : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value)-Outhost
+            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DEP : ON] for {1}" -f $Mitigation.Key,$Mitigation.Value)-Outhost
             If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
                 Set-ProcessMitigation $Mitigation.Value -enable DEP
             }
         }
 
         Foreach ($Mitigation in $ApplicationMitigationsASLR_BU.GetEnumerator()){
-            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:BottomUp : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value)-Outhost
+            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:BottomUp : ON] for {1}" -f $Mitigation.Key,$Mitigation.Value)-Outhost
             If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
                 Set-ProcessMitigation $Mitigation.Value -enable BottomUp
             }
         }
 
         Foreach ($Mitigation in $ApplicationMitigationsASLR_FRI.GetEnumerator()){
-            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:ForceRelocateImages : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value)-Outhost
+            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [ASLR:ForceRelocateImages : ON] for {1}" -f $Mitigation.Key,$Mitigation.Value)-Outhost
             If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
                 Set-ProcessMitigation $Mitigation.Value -enable ForceRelocateImages
             }
         }
 
         Foreach ($Mitigation in $ApplicationMitigationsImageLoad.GetEnumerator()){
-            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [BlockRemoteImageLoads : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value)-Outhost
+            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [BlockRemoteImageLoads : ON] for {1}" -f $Mitigation.Key,$Mitigation.Value)-Outhost
             If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
                 Set-ProcessMitigation $Mitigation.Value -enable BlockRemoteImageLoads
             }
         }
 
         Foreach ($Mitigation in $ApplicationMitigationsAllPayload.GetEnumerator()){
-            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation[Payload:Export & Rop* : ON] options for {1}..." -f $Mitigation.Key,$Mitigation.Value)-Outhost
+            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation[Payload:Export & Rop* : ON] options for {1}" -f $Mitigation.Key,$Mitigation.Value)-Outhost
             If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
                 Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilter
                 Set-ProcessMitigation $Mitigation.Value -enable EnableExportAddressFilterPlus
@@ -1567,7 +1568,7 @@ If($ApplyEMETMitigations)
         }
 
         Foreach ($Mitigation in $ApplicationMitigationsPayloadROP.GetEnumerator()){
-            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [Payload:Rop* : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value)-Outhost
+            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [Payload:Rop* : ON] for {1}" -f $Mitigation.Key,$Mitigation.Value)-Outhost
             If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
                 Set-ProcessMitigation $Mitigation.Value -enable EnableRopStackPivot
                 Set-ProcessMitigation $Mitigation.Value -enable EnableRopCallerCheck
@@ -1576,7 +1577,7 @@ If($ApplyEMETMitigations)
         }
 
         Foreach ($Mitigation in $ApplicationMitigationsChild.GetEnumerator()){
-            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DisallowChildProcessCreation : ON] for {1}..." -f $Mitigation.Key,$Mitigation.Value)-Outhost
+            Write-LogEntry ("STIG Rule ID: {0}: Enabling Exploit Protection mitigation [DisallowChildProcessCreation : ON] for {1}" -f $Mitigation.Key,$Mitigation.Value)-Outhost
             If(-not(Get-ProcessMitigation -Name $Mitigation.Value)){
                 Set-ProcessMitigation $Mitigation.Value -enable DisallowChildProcessCreation
             }

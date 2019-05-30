@@ -26,8 +26,8 @@
 
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/29/2019
-        Version:        1.1.4
+        Last Update:    05/30/2019
+        Version:        1.1.5
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
@@ -49,6 +49,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOG
+        1.1.5 - May 30, 2019 - defaulted reg type to dword if not specified, standarized registry keys captalizations    
         1.1.4 - May 29, 2019 - fixed FOD issue and messages. fixed set-usersettings default users; fixed office detection
                                 resolved all VSC problems  
         1.1.3 - May 28, 2019 - fixed Get-SMSTSENV log path
@@ -117,7 +118,7 @@ Function Get-SMSTSENV{
         }
         catch{
             If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
-            If(!$NoWarning){Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode." -f $prefix)}
+            If(!$NoWarning){Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode" -f $prefix)}
             
             #set variable to null
             $Script:tsenv = $null
@@ -159,9 +160,9 @@ Function Get-SMSTSENV{
 
 Function Format-ElapsedTime($ts) {
     $elapsedTime = ""
-    if ( $ts.Minutes -gt 0 ){$elapsedTime = [string]::Format( "{0:00} min. {1:00}.{2:00} sec.", $ts.Minutes, $ts.Seconds, $ts.Milliseconds / 10 );}
-    else{$elapsedTime = [string]::Format( "{0:00}.{1:00} sec.", $ts.Seconds, $ts.Milliseconds / 10 );}
-    if ($ts.Hours -eq 0 -and $ts.Minutes -eq 0 -and $ts.Seconds -eq 0){$elapsedTime = [string]::Format("{0:00} ms.", $ts.Milliseconds);}
+    if ( $ts.Minutes -gt 0 ){$elapsedTime = [string]::Format( "{0:00} min. {1:00}.{2:00} sec", $ts.Minutes, $ts.Seconds, $ts.Milliseconds / 10 );}
+    else{$elapsedTime = [string]::Format( "{0:00}.{1:00} sec", $ts.Seconds, $ts.Milliseconds / 10 );}
+    if ($ts.Hours -eq 0 -and $ts.Minutes -eq 0 -and $ts.Seconds -eq 0){$elapsedTime = [string]::Format("{0:00} ms", $ts.Milliseconds);}
     if ($ts.Milliseconds -eq 0){$elapsedTime = [string]::Format("{0} ms", $ts.TotalMilliseconds);}
     return $elapsedTime
 }
@@ -183,7 +184,7 @@ Function Write-LogEntry{
         [ValidateSet(0,1,2,3,4)]
         [int16]$Severity,
 
-        [parameter(Mandatory=$false, HelpMessage="Name of the log file that the entry will written to.")]
+        [parameter(Mandatory=$false, HelpMessage="Name of the log file that the entry will written to")]
         [ValidateNotNullOrEmpty()]
         [string]$OutputLogFile = $Global:LogFilePath,
 
@@ -435,7 +436,7 @@ Function Set-SystemSetting {
             'DWord' {$LGPORegType = 'DWORD'}
             'QWord' {$LGPORegType = 'DWORD_BIG_ENDIAN'}
             'MultiString' {$LGPORegType = 'LINK'}
-            default {$LGPORegType = 'DWORD'}
+            default {$LGPORegType = 'DWORD';$Type = 'DWord'}
         }
 
         Try{
@@ -483,12 +484,12 @@ Function Set-SystemSetting {
                 }
             }
             Else{
-                Write-LogEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]...." -f $RegHive,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName}
+                Write-LogEntry ("LGPO not enabled. Hardcoding registry keys [{0}\{1}\{2}]" -f $RegHive,$RegKeyPath,$RegKeyName) -Severity 0 -Source ${CmdletName}
             }
         }
         Catch{
             If($TryLGPO -and $LGPOExe){
-                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]...." -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]" -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
             }
         }
         Finally
@@ -499,7 +500,7 @@ Function Set-SystemSetting {
             #verify the registry value has been set
             Try{
                 If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
-                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]...." -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
                     New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
                     New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
                 } 
@@ -654,7 +655,7 @@ Function Set-UserSetting {
             } 
         }
         Else{
-            Write-LogEntry ("User registry hive was not found or specified in Keypath [{0}]. Either use the -ApplyTo Switch or specify user hive [eg. HKCU\]..." -f $RegPath) -Severity 3 -Source ${CmdletName}
+            Write-LogEntry ("User registry hive was not found or specified in Keypath [{0}]. Either use the -ApplyTo Switch or specify user hive [eg. HKCU\].." -f $RegPath) -Severity 3 -Source ${CmdletName}
             return
         }
   
@@ -682,7 +683,7 @@ Function Set-UserSetting {
                 }
 
                 If ($HiveLoaded -eq $true) {   
-                    If($Message){Write-LogEntry ("{0} for User [{1}]..." -f $Message,$UserName)}
+                    If($Message){Write-LogEntry ("{0} for User [{1}].." -f $Message,$UserName)}
                     If($Remove){
                         Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
                     }
@@ -701,7 +702,7 @@ Function Set-UserSetting {
             }
         }
         Else{
-            If($Message){Write-LogEntry ("{0} for [{1}]..." -f $Message,$ProfileList.UserName)}
+            If($Message){Write-LogEntry ("{0} for [{1}].." -f $Message,$ProfileList.UserName)}
             If($Remove){
                 Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
             }
@@ -771,10 +772,10 @@ Function Get-InstalledApplication {
 	}
 	Process {
 		If ($name) {
-			Write-LogEntry -Message "Get information for installed Application Name(s) [$($name -join ', ')]..." -Severity 4 -Source ${CmdletName} -Outhost:$Global:Verbose
+			Write-LogEntry -Message "Get information for installed Application Name(s) [$($name -join ', ')].." -Severity 4 -Source ${CmdletName} -Outhost:$Global:Verbose
 		}
 		If ($productCode) {
-			Write-LogEntry -Message "Get information for installed Product Code [$ProductCode]..." -Severity 4 -Source ${CmdletName} -Outhost:$Global:Verbose
+			Write-LogEntry -Message "Get information for installed Product Code [$ProductCode].." -Severity 4 -Source ${CmdletName} -Outhost:$Global:Verbose
 		}
 		
 		## Enumerate the installed applications from the registry for applications that have the "DisplayName" property
@@ -825,7 +826,7 @@ Function Get-InstalledApplication {
 				If ($ProductCode) {
 					## Verify if there is a match with the product code passed to the script
 					If ($regKeyApp.PSChildName -match [regex]::Escape($productCode)) {
-						Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] matching product code [$productCode]." -Source ${CmdletName} -Outhost
+						Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] matching product code [$productCode]" -Source ${CmdletName} -Outhost
 						$installedApplication += New-Object -TypeName 'PSObject' -Property @{
 							UninstallSubkey = $regKeyApp.PSChildName
 							ProductCode = If ($regKeyApp.PSChildName -match $MSIProductCodeRegExPattern) { $regKeyApp.PSChildName } Else { [string]::Empty }
@@ -849,27 +850,27 @@ Function Get-InstalledApplication {
 							#  Check for an exact application name match
 							If ($regKeyApp.DisplayName -eq $application) {
 								$applicationMatched = $true
-								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using exact name matching for search term [$application]." -Source ${CmdletName} -Outhost
+								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using exact name matching for search term [$application]" -Source ${CmdletName} -Outhost
 							}
 						}
 						ElseIf ($WildCard) {
 							#  Check for wildcard application name match
 							If ($regKeyApp.DisplayName -like $application) {
 								$applicationMatched = $true
-								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using wildcard matching for search term [$application]." -Source ${CmdletName} -Outhost
+								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using wildcard matching for search term [$application]" -Source ${CmdletName} -Outhost
 							}
 						}
 						ElseIf ($RegEx) {
 							#  Check for a regex application name match
 							If ($regKeyApp.DisplayName -match $application) {
 								$applicationMatched = $true
-								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using regex matching for search term [$application]." -Source ${CmdletName} -Outhost
+								Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using regex matching for search term [$application]" -Source ${CmdletName} -Outhost
 							}
 						}
 						#  Check for a contains application name match
 						ElseIf ($regKeyApp.DisplayName -match [regex]::Escape($application)) {
 							$applicationMatched = $true
-							Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using contains matching for search term [$application]." -Source ${CmdletName} -Outhost
+							Write-LogEntry -Message "Found installed application [$appDisplayName] version [$appDisplayVersion] using contains matching for search term [$application]" -Source ${CmdletName} -Outhost
 						}
 						
 						If ($applicationMatched) {
@@ -921,7 +922,7 @@ $Global:Verbose = $false
 If($PSBoundParameters.ContainsKey('Debug') -or $PSBoundParameters.ContainsKey('Verbose')){
     $Global:Verbose = $PsBoundParameters.Get_Item('Verbose')
     $VerbosePreference = 'Continue'
-    Write-Verbose ("[{0}] [{1}] :: VERBOSE IS ENABLED." -f (Format-DatePrefix),$scriptName)
+    Write-Verbose ("[{0}] [{1}] :: VERBOSE IS ENABLED" -f (Format-DatePrefix),$scriptName)
 }
 Else{
     $VerbosePreference = 'SilentlyContinue'
@@ -1008,22 +1009,22 @@ Else{$stepCounter++}
 
 
 If ($DisableOfficeAnimation -and $OfficeInstalled){
-    Set-UserSetting -Message "Disabling OST Cache mode for $OfficeTitle" -Path 'SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\ost' -Name 'NoOST' -Type DWord -Value 2 -Force
-    Set-UserSetting -Message "Disabling Exchange cache mode for $OfficeTitle" -Path 'SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\cache mode' -Name 'Enable' -Type DWord -Value 0 -Force
+    Set-UserSetting -Message "Disabling OST Cache mode for $OfficeTitle" -Path "SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\ost" -Name 'NoOST' -Type DWord -Value 2 -Force
+    Set-UserSetting -Message "Disabling Exchange cache mode for $OfficeTitle" -Path "SOFTWARE\Policies\Microsoft\Office\$OfficeVersion\Outlook\cache mode" -Name 'Enable' -Type DWord -Value 0 -Force
 }
 Else{$stepCounter++}
 
 
 If ($DisableOfficeAnimation -and $OfficeInstalled){
-    Set-UserSetting -Message "Disabling Hardware Acceleration for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics' -Name 'DisableHardwareAcceleration' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling Animation for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics' -Name 'DisableAnimation' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Boot for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun' -Name 'BootRTM' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Movie for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun' -Name 'DisableMovie' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Optin for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General' -Name 'showfirstrunoptin' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling First Run Optin for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\PTWatson' -Name 'PTWOption' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling CEIP for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common' -Name 'qmenable' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Accepting Eulas for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Registration' -Name 'AcceptAllEulas' -Type DWord -Value 1 -Force
-    Set-UserSetting -Message "Disabling Default File Types for $OfficeTitle" -Path 'SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General' -Name 'ShownFileFmtPrompt' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Hardware Acceleration for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics" -Name 'DisableHardwareAcceleration' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Animation for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\Graphics" -Name 'DisableAnimation' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Boot for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun" -Name 'BootRTM' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Movie for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\FirstRun" -Name 'DisableMovie' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Optin for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General" -Name 'showfirstrunoptin' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling First Run Optin for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\PTWatson" -Name 'PTWOption' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling CEIP for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common" -Name 'qmenable' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Accepting Eulas for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Registration" -Name 'AcceptAllEulas' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Default File Types for $OfficeTitle" -Path "SOFTWARE\Microsoft\Office\$OfficeVersion\Common\General" -Name 'ShownFileFmtPrompt' -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
