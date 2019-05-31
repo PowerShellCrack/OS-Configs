@@ -950,6 +950,8 @@ Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 [boolean]$EnableLyncStartup = $false
 [boolean]$RemoveAppxPackages = $false
 [boolean]$RemoveFODPackages = $false
+[boolean]$ForceIEHomepage = $false
+[boolean]$ForceEdgeHomepage = $false
 
 # When running in Tasksequence and configureation exists, use that instead
 If(Get-SMSTSENV){
@@ -965,6 +967,9 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_EnableLyncStartup){[boolean]$EnableLyncStartup = [boolean]::Parse($tsenv.Value("CFG_EnableLyncStartup"))}
     If($tsenv:CFG_RemoveAppxPackages){[boolean]$RemoveAppxPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveAppxPackages"))}
     If($tsenv:CFG_RemoveFODPackages){[boolean]$RemoveFODPackages = [boolean]::Parse($tsenv.Value("CFG_RemoveFODPackages"))}
+    If($tsenv:CFG_ForceIEHomepage){[boolean]$ForceIEHomepage = [boolean]::Parse($tsenv.Value("CFG_ForceIEHomepage"))}
+    If($tsenv:CFG_ForceEdgeHomepage){[boolean]$ForceEdgeHomepage = [boolean]::Parse($tsenv.Value("CFG_ForceEdgeHomepage"))}
+    If($tsenv:Homepage){$Homepage = $tsenv.Value("Homepage")}
 }
 
 # Ultimately disable the entire script. This is useful for testing and using one task sequences with many rules
@@ -1004,6 +1009,28 @@ $stepCounter = 1
 
 If($EnableIESoftwareRender){
     Set-UserSetting -Message "Enabling Software Rendering For IE" -Path 'SOFTWARE\Microsoft\Internet Explorer\Main' -Name 'UseSWRender' -Type DWord -Value 1 -Force
+}
+Else{$stepCounter++}
+
+
+If($ForceIEHomepage -and $Homepage){
+    Set-UserSetting -Message "Setting Homepage For IE" -Path 'SOFTWARE\Microsoft\Internet Explorer\Main' -Name 'Start Page' -Type String -Value $Homepage -Force
+    Set-UserSetting -Message "Setting Default Page For IE" -Path 'SOFTWARE\Microsoft\Internet Explorer\Main' -Name 'Default_Page_URL' -Type String -Value $Homepage -Force
+    Set-UserSetting -Message "Enabling Continuous Browsing For IE" -Path 'SOFTWARE\Microsoft\Internet Explorer\ContinuousBrowsing' -Name 'Enabled' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Default browser prompt For IE" -Path 'SOFTWARE\Microsoft\Internet Explorer\Main' -Name 'Check_Associations' -Type String -Value 'No' -Force
+    Set-UserSetting -Message "Enable new tab homepage For IE" -Path 'Software\Microsoft\Internet Explorer\TabbedBrowsing' -Name 'NewTabbedPageShow' -Type DWord -Value 1 -Force
+}
+Else{$stepCounter++}
+
+
+If($ForceEdgeHomepage -and $Homepage){
+    Set-UserSetting -Message "Setting Homepage For Edge" -Path 'SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'HomeButtonPage' -Type String -Value $Homepage -Force
+    Set-UserSetting -Message "Enabling Home button For Edge" -Path 'SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'HomeButtonEnabled' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling startpage lockdown For Edge" -Path 'SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name 'DisableLockdownOfStartPages' -Type DWord -Value 1 -Force -TryLGPO:$true
+    Set-UserSetting -Message "Enabling provisioned homepages For Edge" -Path 'SOFTWARE\Policies\Microsoft\MicrosoftEdge\Internet Settings' -Name 'ProvisionedHomePages' -Type String -Value $Homepage -Force -TryLGPO:$true
+    Set-UserSetting -Message "Disabling First run For Edge" -Path 'SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\FirstRun' -Name 'LastFirstRunVersionDelivered' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling IE10 Tour Show For Edge" -Path 'SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'IE10TourShown' -Type DWord -Value 1 -Force
+    Set-UserSetting -Message "Disabling Default browser prompt For Edge" -Path 'SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main' -Name 'DisallowDefaultBrowserPrompt' -Type DWord -Value 1 -Force
 }
 Else{$stepCounter++}
 
