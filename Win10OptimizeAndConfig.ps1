@@ -125,6 +125,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOGS
+        3.2.0 - Jun 3, 2019 - fixed error exception messages
         3.1.9 - May 30, 2019 - defaulted reg type to dword if not specified, standarized registry keys captalizations
         3.1.8 - May 29, 2019 - fixed UnusedFeature issue and set-usersettings default users, and user freidnly displays for apps removal
                                 resolved all VSC problems  
@@ -318,7 +319,7 @@ Function Write-LogEntry{
             Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
         }
         catch {
-            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
+            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.Message) -ForegroundColor Red
         }
     }
     End{
@@ -455,7 +456,7 @@ Function Set-Bluetooth{
                 Await ($bluetooth.SetStateAsync($DeviceStatus)) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
             }
             Catch{
-                Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.Message) -Severity 3 -Source ${CmdletName}
             }
             Finally{
                 #If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
@@ -639,28 +640,31 @@ Function Set-SystemSetting {
         }
         Catch{
             If($TryLGPO -and $LGPOExe){
-                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]" -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("LGPO failed to run. exit code: {0}. Setting registry keys [{1}\{2}\{3}] instead" -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
             }
         }
         Finally
         {
             #wait for LGPO file to finish generating
             start-sleep 1
-            
+
             #verify the registry value has been set
             Try{
                 If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
-                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
-                    New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
-                    New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Path was not found; Creating path and setting registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    #New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
+                    New-Item ($RegHive +'\'+ $RegKeyPath) -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | New-ItemProperty -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -ErrorAction Stop | Out-Null
+                    #wait for registry path to popluate (only on slower systems)
+                    #start-sleep 2
+                    #New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 } 
                 Else{
-                    Write-LogEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
-                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Setting key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
+                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 }
             }
             Catch{
-                Write-LogEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegHive,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName}
+                Write-LogEntry ("Unable to configure registry key [{0}\{1}\{2}]. {4}" -f $RegHive,$RegKeyPath,$RegKeyName,$Value,$_.Exception.Message) -Severity 3 -Source ${CmdletName}
             }
 
         }
@@ -2547,7 +2551,7 @@ If ($EnableWinRM)
 
     }
     Catch{
-        Write-LogEntry ("Unable to setup WinRM: {0}" -f $_.Exception.ErrorMessage) -Severity 3
+        Write-LogEntry ("Unable to setup WinRM: {0}" -f $_.Exception.Message) -Severity 3
     }
 }
 Else{$stepCounter++}
