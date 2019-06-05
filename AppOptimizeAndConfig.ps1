@@ -26,8 +26,8 @@
 
     .NOTES
         Author:         Richard Tracy	    
-        Last Update:    05/30/2019
-        Version:        1.1.5
+        Last Update:    06/5/2019
+        Version:        1.1.6
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
@@ -49,6 +49,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .LOG
+        1.1.6 - Jun 5, 2019 - Fixed Remove-AppxPackage for AllUsers    
         1.1.5 - May 30, 2019 - defaulted reg type to dword if not specified, standarized registry keys captalizations    
         1.1.4 - May 29, 2019 - fixed FOD issue and messages. fixed set-usersettings default users; fixed office detection
                                 resolved all VSC problems  
@@ -1101,6 +1102,7 @@ If($RemoveAppxPackages)
 
     $p = 1
     $c = 0
+    $d = 0
     # Loop through the list of appx packages
     foreach ($App in $AppArrayList) {
 
@@ -1110,41 +1112,48 @@ If($RemoveAppxPackages)
         }
         else {
             # Gather package names
-            $AppPackageFullName = Get-AppxPackage -Name $App.Name | Select-Object -ExpandProperty PackageFullName
+            $AppPackageDetails = Get-AppxPackage -AllUsers -Name $App.Name 
             
-            $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $App.Name } | Select-Object -ExpandProperty PackageName
+            $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $AppPackageDetails.Name } | Select-Object -ExpandProperty PackageName
 
             # Attempt to remove AppxPackage
-            if ($null -ne $AppPackageFullName) {
-                Show-ProgressStatus -Message ("Removing application package: {0}" -f $App.Name) -Step $p -MaxStep $AppArrayList.count
+            if ($null -ne $AppPackageDetails) {
+                Show-ProgressStatus -Message ("Removing application package: {0}" -f $AppPackageDetails.Name) -Step $p -MaxStep $AppArrayList.count
                 
                 try {
-                    Remove-AppxPackage -Package $AppPackageFullName -ErrorAction Stop | Out-Null
+                    Remove-AppxPackage -AllUsers -Package $AppPackageDetails.PackageFullName -ErrorAction Stop | Out-Null
                     
-                    Write-LogEntry -Message ("Successfully removed application package: {0}" -f $App.Name) -Outhost
+                    Write-LogEntry -Message ("Successfully removed application package: {0}" -f $AppPackageDetails.PackageFullName) -Outhost
                     $c++
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Message ("Failed removing AppxPackage: {0}" -f $_.Message) -Severity 3 -Outhost
+                    Write-LogEntry -Message ("Failed removing AppxPackage: {0}" -f $_) -Severity 3 -Outhost
+                }   
+                Finally{
+                    Write-LogEntry -Message ("--------------------------------------------------" ) -Outhost
                 }
             }
             else {
-                Write-LogEntry -Message ("Unable to locate AppxPackage for app: {0}" -f $App.Name) -Outhost
+                Write-LogEntry -Message ("Unable to locate AppxPackage for app: {0}" -f $AppPackageDetails.Name) -Outhost
             }
 
             # Attempt to remove AppxProvisioningPackage
-            if ($null -eq $AppProvisioningPackageName) {
-                Write-LogEntry -Message ("Removing application provisioning package: {0}" -f $AppProvisioningPackageName)
+            if ($null -ne $AppProvisioningPackageName) {
+                Write-LogEntry -Message ("Removing application PROVISIONED package: {0}" -f $AppProvisioningPackageName)
                 try {
                     Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
-                    Write-LogEntry -Message ("Successfully removed application provisioning package: {0}" -f $AppProvisioningPackageName) -Outhost
+                    Write-LogEntry -Message ("Successfully removed application PROVISIONED package: {0}" -f $AppProvisioningPackageName) -Outhost
+                    $d++
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Message ("Failed removing Appx Provisioning Package: {0}" -f $_.Message) -Severity 3 -Outhost
+                    Write-LogEntry -Message ("Failed removing Appx PROVISIONED Package: {0}" -f $_) -Severity 3 -Outhost
+                }
+                Finally{
+                    Write-LogEntry -Message ("--------------------------------------------------" ) -Outhost
                 }
             }
             else {
-                Write-LogEntry -Message ("Unable to locate Appx Provisioning Package for app: {0}" -f $App.Name) -Outhost
+                Write-LogEntry -Message ("Unable to locate Appx PROVISIONED Package for app: {0}" -f $AppPackageDetails.Name) -Outhost
             }
 
         }
@@ -1152,7 +1161,8 @@ If($RemoveAppxPackages)
         $p++
     }
 
-    Write-LogEntry -Message ("Removed {0} built-in AppxPackage and AppxProvisioningPackage" -f $c) -Outhost
+    Write-LogEntry -Message ("Removed {0} All Users App Package's" -f $c) -Outhost
+    Write-LogEntry -Message ("Removed {0} built-in App PROVISIONED Package's" -f $d) -Outhost
 }
 Else{$stepCounter++}
 

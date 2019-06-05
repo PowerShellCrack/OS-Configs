@@ -2694,7 +2694,7 @@ If($EnableCredGuard)
             Write-LogEntry "Successfully enabled Microsoft-Hyper-V-HyperVisor feature"
         }
         catch [System.Exception] {
-            Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. Error: -f $_") -Severity 3
+            Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. {0}" -f $_) -Severity 3
         }
 
         try {
@@ -2703,7 +2703,7 @@ If($EnableCredGuard)
             Write-LogEntry "Successfully enabled IsolatedUserMode feature"
         }
         catch [System.Exception] {
-            Write-LogEntry ("An error occured when enabling IsolatedUserMode. Error: -f $_") -Severity 3
+            Write-LogEntry ("An error occured when enabling IsolatedUserMode. {0}" -f $_) -Severity 3
         }
     }
     
@@ -2718,7 +2718,7 @@ If($EnableCredGuard)
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Enabled' -Type DWord -Value 1 -Force
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Locked' -Type DWord -Value 0 -Force
 
-    Write-LogEntry "STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems"
+    Write-LogEntry "Enabling Credential Guard on domain-joined systems"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LsaCfgFlags' -Type DWord -Value 1 -Force   
     
     $DeviceGuardProperty = Get-CimInstance –ClassName Win32_DeviceGuard –Namespace root\Microsoft\Windows\DeviceGuard
