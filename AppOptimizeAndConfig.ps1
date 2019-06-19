@@ -7,6 +7,21 @@
         Utilizes LGPO.exe to apply group policy item where neceassary.
         Utilizes MDT/SCCM TaskSequence property control
             Configurable using custom variables in MDT/SCCM
+    
+    .INFO
+        Author:         Richard Tracy
+        Email:          richard.tracy@hotmail.com
+        Twitter:        @rick2_1979
+        Website:        www.powershellcrack.com
+        Last Update:    06/18/2019
+        Version:        1.1.6
+        Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti,JGSpiers
+
+    .DISCLOSURE
+        THE SCRIPT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES 
+        OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. BY USING OR DISTRIBUTING THIS SCRIPT, YOU AGREE THAT IN NO EVENT 
+        SHALL RICHARD TRACY OR ANY AFFILATES BE HELD LIABLE FOR ANY DAMAGES WHATSOEVER RESULTING FROM USING OR DISTRIBUTION OF THIS SCRIPT, INCLUDING,
+        WITHOUT LIMITATION, ANY SPECIAL, CONSEQUENTIAL, INCIDENTAL OR OTHER DIRECT OR INDIRECT DAMAGES. BACKUP UP ALL DATA BEFORE PROCEEDING. 
 
     .PARAM
         '// Global Settings
@@ -23,12 +38,6 @@
         CFG_EnableLyncStartup
         CFG_RemoveAppxPackages
         CFG_RemoveFODPackages
-
-    .NOTES
-        Author:         Richard Tracy	    
-        Last Update:    06/5/2019
-        Version:        1.1.6
-        Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti
 
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
@@ -48,8 +57,8 @@
         https://github.com/TheVDIGuys/W10_1803_VDI_Optimize
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
-    .LOG
-        1.1.6 - Jun 5, 2019 - Fixed Remove-AppxPackage for AllUsers    
+    .CHANGE LOG
+        1.1.6 - Jun 18, 2019 - Added more info page, change Get-SMSTSENV warning to verbose message    
         1.1.5 - May 30, 2019 - defaulted reg type to dword if not specified, standarized registry keys captalizations    
         1.1.4 - May 29, 2019 - fixed FOD issue and messages. fixed set-usersettings default users; fixed office detection
                                 resolved all VSC problems  
@@ -102,24 +111,30 @@ Function Get-ScriptPath {
 }
 
 
+
 Function Get-SMSTSENV{
     param(
-        [switch]$ReturnLogPath,
-        [switch]$NoWarning
+        [switch]$ReturnLogPath
     )
     
     Begin{
         ## Get the name of this function
         [string]${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name
+        
+        if (-not $PSBoundParameters.ContainsKey('Verbose')) {
+          $VerbosePreference = $PSCmdlet.SessionState.PSVariable.GetValue('VerbosePreference')
+        }
     }
     Process{
+        If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
+  
         try{
             # Create an object to access the task sequence environment
-            $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment 
+            $Script:tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment
+            Write-Verbose ("{0}Task Sequence environment detected!" -f $prefix)
         }
         catch{
-            If(${CmdletName}){$prefix = "${CmdletName} ::" }Else{$prefix = "" }
-            If(!$NoWarning){Write-Warning ("{0}Task Sequence environment not detected. Running in stand-alone mode" -f $prefix)}
+            Write-Verbose ("{0}Task Sequence environment not detected. Running in stand-alone mode" -f $prefix)
             
             #set variable to null
             $Script:tsenv = $null
@@ -129,7 +144,7 @@ Function Get-SMSTSENV{
             if ($Script:tsenv){
                 #grab the progress UI
                 $Script:TSProgressUi = New-Object -ComObject Microsoft.SMS.TSProgressUI
-
+  
                 # Convert all of the variables currently in the environment to PowerShell variables
                 $tsenv.GetVariables() | ForEach-Object { Set-Variable -Name "$_" -Value "$($tsenv.Value($_))" }
                 
@@ -156,7 +171,8 @@ Function Get-SMSTSENV{
             return $Script:tsenv
         }
     }
-}
+  }
+  
 
 
 Function Format-ElapsedTime($ts) {
@@ -945,7 +961,7 @@ Else{
 #build log name
 [string]$FileName = $scriptBaseName +'.log'
 #build global log fullpath
-$Global:LogFilePath = Join-Path (Get-SMSTSENV -ReturnLogPath -NoWarning) -ChildPath $FileName
+$Global:LogFilePath = Join-Path (Get-SMSTSENV -ReturnLogPath -Verbose) -ChildPath $FileName
 Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 
 
@@ -1010,8 +1026,8 @@ If($OfficeInstalled){
 }
 
 #if running in a tasksequence; apply user settings to all user profiles (use ApplyTo param cmdlet Set-UserSettings )
-If(Get-SMSTSENV -NoWarning){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
-If((Get-SMSTSENV -NoWarning) -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
+If(Get-SMSTSENV){$Global:ApplyToProfiles = 'AllUsers'}Else{$Global:ApplyToProfiles = 'CurrentUser'}
+If((Get-SMSTSENV) -and -not($psISE)){$Global:OutToHost = $false}Else{$Global:OutToHost = $true}
 
 #grab all Show-ProgressStatus commands in script and count them
 $script:Maxsteps = ([System.Management.Automation.PsParser]::Tokenize((Get-Content $scriptPath), [ref]$null) | Where-Object { $_.Type -eq 'Command' -and $_.Content -eq 'Show-ProgressStatus' }).Count

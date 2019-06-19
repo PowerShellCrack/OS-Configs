@@ -1,5 +1,5 @@
-# Windows 10 Optimization And Configurations
- - Applies all types of settings for Windows 10. Script variables can be set either internal (standalone) or using MDT/SCCM Task sequence custom properties. Ultimately MDT/SCCM properties will overwrite internal variable if set. 
+# Windows Optimization And Configurations
+ - Applies all types of settings for Windows 10 and Server 16. Script variables can be set either internal (standalone) or using MDT/SCCM Task sequence custom properties. Ultimately MDT/SCCM properties will overwrite internal variable if set. 
 
 ## Project: 
  - This is part of my <b>MDT automation Project</b>
