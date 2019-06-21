@@ -13,8 +13,8 @@
         Email:          richard.tracy@hotmail.com
         Twitter:        @rick2_1979
         Website:        www.powershellcrack.com
-        Last Update:    06/18/2019
-        Version:        3.2.0
+        Last Update:    06/20/2019
+        Version:        3.2.1
         Thanks to:      unixuser011,W4RH4WK,TheVDIGuys,cluberti,JGSpiers
 
     .DISCLOSURE
@@ -84,6 +84,8 @@
         CFG_ApplyPrivacyMitigations
         CFG_RemoveRebootOnLockScreen
         CFG_RemoveUnusedPrinters
+        CFG_RemoveVMToolsTrayIcon
+        CFG_EnableShutdownEventTracker
 
         '//System Adv Settings
         CFG_DisableSmartCardLogon
@@ -117,7 +119,18 @@
     .EXAMPLE
         #Copy this to MDT CustomSettings.ini
 
-        Properties=CFG_DisableConfigScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_EnableVisualPerformance,CFG_InstallLogonScript,CFG_LogonScriptPath,CFG_EnableDarkTheme,CFG_EnableTaskbarAutoColor,CFG_DisableFontSmoothing,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableOfficeOneNote,CFG_DisableOneDrive,CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,CFG_DisableStoreOnTaskbar,CFG_DisableActivityHistory,CFG_SetSmartScreenFilter,CFG_EnableNumlockStartup,CFG_DisableAppSuggestions,,#// System Settings,CFG_InstallPSModules,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableIEEnterpriseMode,CFG_IEEMSiteListPath,CFG_ApplyCustomHost,HostPath,CFG_EnableSecureLogonCAD,CFG_DisableAllNotifications,CFG_EnableVerboseMsg,CFG_DisableAutoRun,CFG_PreferIPv4OverIPv6,CFG_EnableAppsRunAsAdmin,CFG_HideDrives,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWUP2P,CFG_DisablePreviewBuild,CFG_DisableDriverUpdates,CFG_DisableWindowsUpgrades,CFG_ApplyPrivacyMitigations,CFG_RemoveRebootOnLockScreen,CFG_DisableSmartCardLogon,CFG_ForceStrictSmartCardLogon,CFG_EnableFIPS,CFG_EnableCredGuard,CFG_DisableUAC,CFG_EnableStrictUAC,CFG_EnableRDP,CFG_EnableWinRM,CFG_EnableRemoteRegistry,CFG_EnableUEV,CFG_EnableAppV,CFG_EnablePSLogging,CFG_EnableLinuxSubSystem,CFG_DisableAdminShares,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,CFG_DisableBluetooth,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableIndexing,CFG_RemoveActiveSetupComponents,CFG_PreCompileAssemblies,CFG_OptimizeNetwork,CFG_RemoveUnusedPrinters
+        Properties=CFG_DisableConfigScript,CFG_UseLGPOForConfigs,LGPOPath,CFG_OptimizeForVDI,CFG_EnableVisualPerformance,CFG_InstallLogonScript,CFG_LogonScriptPath,
+        CFG_EnableDarkTheme,CFG_EnableTaskbarAutoColor,CFG_DisableFontSmoothing,CFG_DisableCortana,CFG_DisableInternetSearch,CFG_EnableOfficeOneNote,CFG_DisableOneDrive,
+        CFG_DisableWindowsFirstLoginAnimation,CFG_DisableIEFirstRunWizard,CFG_DisableWMPFirstRunWizard,CFG_ShowKnownExtensions,CFG_ShowHiddenFiles,CFG_ShowThisPCOnDesktop,
+        CFG_ShowUserFolderOnDesktop,CFG_RemoveRecycleBinOnDesktop,CFG_Hide3DObjectsFromExplorer,CFG_DisableEdgeShortcut,CFG_DisableStoreOnTaskbar,CFG_DisableActivityHistory,
+        CFG_SetSmartScreenFilter,CFG_EnableNumlockStartup,CFG_DisableAppSuggestions,CFG_InstallPSModules,CFG_SetPowerCFG,CFG_PowerCFGFilePath,CFG_EnableIEEnterpriseMode,
+        CFG_IEEMSiteListPath,CFG_ApplyCustomHost,HostPath,CFG_EnableSecureLogonCAD,CFG_DisableAllNotifications,CFG_EnableVerboseMsg,CFG_DisableAutoRun,CFG_PreferIPv4OverIPv6,
+        CFG_EnableAppsRunAsAdmin,CFG_HideDrives,CFG_DisableActionCenter,CFG_DisableFeedback,CFG_DisableWUP2P,CFG_DisablePreviewBuild,CFG_DisableDriverUpdates,
+        CFG_DisableWindowsUpgrades,CFG_ApplyPrivacyMitigations,CFG_RemoveRebootOnLockScreen,CFG_RemoveVMToolsTrayIcon,CFG_EnableShutdownEventTracker,CFG_DisableSmartCardLogon,
+        CFG_ForceStrictSmartCardLogon,CFG_EnableFIPS,CFG_EnableCredGuard,CFG_DisableUAC,CFG_EnableStrictUAC,CFG_EnableRDP,CFG_EnableWinRM,CFG_EnableRemoteRegistry,CFG_EnableUEV,
+        CFG_EnableAppV,CFG_EnablePSLogging,CFG_EnableLinuxSubSystem,CFG_DisableAdminShares,CFG_DisableSchTasks,CFG_DisableDefender,CFG_DisableFirewall,CFG_DisableWireless,
+        CFG_DisableBluetooth,CFG_DisableNewNetworkDialog,CFG_DisableInternetServices,CFG_DisabledUnusedServices,CFG_DisabledUnusedFeatures,CFG_DisableIndexing,
+        CFG_RemoveActiveSetupComponents,CFG_PreCompileAssemblies,CFG_OptimizeNetwork,CFG_RemoveUnusedPrinters
 
         #Then add each option to a priority specifically for your use, like:
         [Default]
@@ -134,6 +147,7 @@
         https://github.com/cluberti/VDI/blob/master/ConfigAsVDI.ps1
 
     .CHANGE LOGS
+        3.2.1 - Jun 20, 2019 - Added CFG_EnableShutdownEventTracker and CFG_RemoveVMToolsTrayIcon option
         3.2.0 - Jun 18, 2019 - Added more info page, change Get-SMSTSENV warning to verbose message
         3.1.9 - May 30, 2019 - defaulted reg type to dword if not specified, standarized registry keys captalizations
         3.1.8 - May 29, 2019 - fixed UnusedFeature issue and set-usersettings default users, and user freidnly displays for apps removal
@@ -1158,6 +1172,7 @@ Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 [boolean]$RemoveRebootOnLockScreen = $false
 [boolean]$RemoveUnusedPrinters = $false
 [boolean]$RemoveVMToolsTrayIcon = $false
+[boolean]$EnableShutdownEventTracker = $false
 # System Adv Settings
 [boolean]$DisableSmartCardLogon = $false
 [boolean]$ForceStrictSmartCardLogon = $false
@@ -1248,6 +1263,7 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_RemoveRebootOnLockScreen){[boolean]$RemoveRebootOnLockScreen = [boolean]::Parse($tsenv.Value("CFG_RemoveRebootOnLockScreen"))}
     If($tsenv:CFG_RemoveUnusedPrinters){[boolean]$RemoveUnusedPrinters = [boolean]::Parse($tsenv.Value("CFG_RemoveUnusedPrinters"))}
     If($tsenv:CFG_RemoveVMToolsTrayIcon){[boolean]$RemoveVMToolsTrayIcon = [boolean]::Parse($tsenv.Value("CFG_RemoveVMToolsTrayIcon"))}
+    If($tsenv:CFG_EnableShutdownEventTracker){[boolean]$EnableShutdownEventTracker = [boolean]::Parse($tsenv.Value("CFG_EnableShutdownEventTracker"))}
 
     # System Adv Settings
     If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
@@ -1676,6 +1692,14 @@ If ($DisableOneDrive)
 Else{
     $stepCounter++
 }
+
+
+If($CFG_EnableShutdownEventTracker)
+{
+    Show-ProgressStatus -Message "Enabling Shutdown Event Tracker" -Step ($stepCounter++) -MaxStep $script:Maxsteps
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Reliability' -Name 'ShutdownReasonUI' -Type DWord -Value 1 -Force
+}
+Else{$stepCounter++}
 
 
 If ($PreferIPv4OverIPv6)
