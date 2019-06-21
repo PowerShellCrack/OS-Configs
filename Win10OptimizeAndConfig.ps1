@@ -1157,6 +1157,7 @@ Write-Host "logging to file: $LogFilePath" -ForegroundColor Cyan
 [boolean]$ApplyPrivacyMitigations = $false
 [boolean]$RemoveRebootOnLockScreen = $false
 [boolean]$RemoveUnusedPrinters = $false
+[boolean]$RemoveVMToolsTrayIcon = $false
 # System Adv Settings
 [boolean]$DisableSmartCardLogon = $false
 [boolean]$ForceStrictSmartCardLogon = $false
@@ -1246,6 +1247,8 @@ If(Get-SMSTSENV){
     If($tsenv:CFG_ApplyPrivacyMitigations){[boolean]$ApplyPrivacyMitigations = [boolean]::Parse($tsenv.Value("CFG_ApplyPrivacyMitigations"))}
     If($tsenv:CFG_RemoveRebootOnLockScreen){[boolean]$RemoveRebootOnLockScreen = [boolean]::Parse($tsenv.Value("CFG_RemoveRebootOnLockScreen"))}
     If($tsenv:CFG_RemoveUnusedPrinters){[boolean]$RemoveUnusedPrinters = [boolean]::Parse($tsenv.Value("CFG_RemoveUnusedPrinters"))}
+    If($tsenv:CFG_RemoveVMToolsTrayIcon){[boolean]$RemoveVMToolsTrayIcon = [boolean]::Parse($tsenv.Value("CFG_RemoveVMToolsTrayIcon"))}
+
     # System Adv Settings
     If($tsenv:CFG_DisableSmartCardLogon){[boolean]$DisableSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_DisableSmartCardLogon"))}
     If($tsenv:CFG_ForceStrictSmartCardLogon){[boolean]$ForceStrictSmartCardLogon = [boolean]::Parse($tsenv.Value("CFG_ForceStrictSmartCardLogon"))}
@@ -1400,7 +1403,7 @@ If($DisableWindowsUpgrades)
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' -Name 'DisableOSUpgrade' -Type DWord -Value 1 -Force | Out-Null
 
     Write-LogEntry "Disabling access the Insider build controls in the Advanced Options"
-    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'LimitEnhancedDiagnosticDataWindowsAnalytics' -Type DWord -Value 1 -Force | Out-Null  
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'LimitEnhancedDiagnosticDataWindowsAnalytics' -Type DWord -Value 1 -Force -TryLGPO:$true 
 }
 Else{$stepCounter++}
 
@@ -1705,6 +1708,7 @@ If($DisableAllNotifications)
         "Windows.SystemToast.RasToastNotifier"="VPN Notifications"
         "Windows.SystemToast.HelloFace"="Windows Hello Notifications"
         "Windows.SystemToast.WiFiNetworkManager"="Wireless Notifications"
+        
     }   
     Show-ProgressStatus -Message "Disabling Toast Notifications" -Step ($stepCounter++) -MaxStep $script:Maxsteps
     $i = 1
@@ -2764,7 +2768,6 @@ If ($OptimizeForVDI)
 {
     Show-ProgressStatus -Message "Configuring VDI Optimizations" -Step ($stepCounter++) -MaxStep $script:Maxsteps
 
-	
     Write-LogEntry "VDI Optimizations :: Hiding network options from Lock Screen"
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'DontDisplayNetworkSelectionUI' -Type DWord -Value 1 -Force -TryLGPO:$true
 
@@ -2777,7 +2780,7 @@ If ($OptimizeForVDI)
     Write-LogEntry "VDI Optimizations [OSOT ID:30] :: Disabling Background Layout Service"
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OptimalLayout' -Name 'EnableAutoLayout' -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations [OSOT ID:31] :: Disabling CIFS Change Notifications"
+    Write-LogEntry "VDI Optimizations [OSOT ID:31] :: Disabling CIfS Change Notifications"
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name 'NoRemoteRecursiveEvents' -Type DWord -Value 0 -Force
     
     Write-LogEntry ("VDI Optimizations :: Disabling Storage Sense")
@@ -2825,31 +2828,31 @@ If ($OptimizeForVDI)
     Write-LogEntry "VDI Optimizations [OSOT ID:287] :: Disabling  Boot Optimize Function"
 	Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Dfrg\BootOptimizeFunction' -Name 'Enable' -Type String -Value '0' -Force
 
-    Write-LogEntry "VDI Optimizations :: Disable Superfetch"
+    Write-LogEntry "VDI Optimizations :: Disabling Superfetch"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters' -Name 'EnableSuperfetch' -Type DWord -Value 0 -Force 
 
     Write-LogEntry "VDI Optimizations :: Disabling Paging Executive"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'DisablePagingExecutive' -Value 1 -Force
 
-    Write-LogEntry "VDI Optimizations :: Disable Storing Recycle Bin Files"
+    Write-LogEntry "VDI Optimizations :: Disabling Storing Recycle Bin Files"
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\policies\Explorer' -Name 'NoRecycleFiles' -Type DWord -Value 1 -Force
 
-    Write-LogEntry "VDI Optimizations :: Disk Timeout Value"
+    Write-LogEntry "VDI Optimizations :: Reducing Disk Timeout Value"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\Disk' -Name 'TimeOutValue' -Type DWord -Value 200 -Force
 
-    Write-LogEntry "VDI Optimizations :: Application Event Log Max Size"
+    Write-LogEntry "VDI Optimizations :: Reducing Application Event Log Max Size"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Application' -Name 'MaxSize' -Type DWord -Value 100000 -Force
 
-    Write-LogEntry "VDI Optimizations :: Application Event Log Retention"
+    Write-LogEntry "VDI Optimizations :: Disabling Application Event Log Retention"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Application' -Name 'Retention' -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations :: System Event Log Max Size"
+    Write-LogEntry "VDI Optimizations :: Reducing System Event Log Max Size"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\eventlog\System' -Name 'MaxSize' -Type DWord -Value 100000 -Force
 
-    Write-LogEntry "VDI Optimizations :: System Event Log Retention"
+    Write-LogEntry "VDI Optimizations :: Disabling System Event Log Retention"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\eventlog\System' -Name 'Retention' -Type DWord -Value 0 -Force
 
-    Write-LogEntry "VDI Optimizations :: Security Event Log Max Size"
+    Write-LogEntry "VDI Optimizations :: Reducing Security Event Log Max Size"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\services\eventlog\Security' -Name 'MaxSize' -Type DWord -Value 100000 -Force
 
     Write-LogEntry "VDI Optimizations :: Disabling Security Event Log Retention"
@@ -2889,9 +2892,8 @@ If ($OptimizeForVDI)
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\UBPM' -Name Start -Type DWord -Value 0 -Force
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiDriverIHVSession' -Name Start -Type DWord -Value 0 -Force
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\WiFiSession' -Name Start -Type DWord -Value 0 -Force
-    #>
 
-    
+    #>
 
     Write-LogEntry "VDI Optimizations :: Disabling TLS 1.0"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client' -Name 'Enabled' -Type DWORD -Value '0' -Force
@@ -2899,16 +2901,21 @@ If ($OptimizeForVDI)
 	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'Enabled' -Type DWORD -Value '0' -Force
 	Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' -Name 'DisabledByDefault' -Type DWORD -Value '1' -Force
 
-    
     Set-UserSetting -Message "VDI Optimizations :: Change Explorer Default View" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'LaunchTo' -Type DWord -Value 1 -Force 
-    Set-UserSetting -Message "VDI Optimizations :: Settings Temporary Internet Files to Non Persistent" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache' -Name 'Persistent' -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations [OSOT 11] :: Disable RSS Feeds" -Path 'SOFTWARE\Microsoft\Feeds' -Name 'SyncStatus' -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations [OSOT ID:8] :: Disabling show most used apps at start menu" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'Start_TrackProgs' -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations [OSOT ID:9] :: Disabling show recent items at start menu" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'Start_TrackDocs' -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations [OSOT ID:30] :: Disabling Toast notifications to the lock screen" -Path 'SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications' -Name 'NoToastApplicationNotificationOnLockScreen' -Type DWord -Value '1' -Force
     Set-UserSetting -Message "VDI Optimizations [VDIGUYS] :: Remove People Button From the Task Bar in Windows" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People' -Name 'PeopleBand' -Type DWord -Value 0 -Force
-
-
+    Set-UserSetting -Message "VDI Optimizations :: Settings Temporary Internet Files to Non Persistent" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache' -Name 'Persistent' -Type DWord -Value 0 -Force
+    
+    Write-LogEntry "VDI Optimizations :: Reduce IE Temp File."
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths' -Name Paths -Type DWord -Value 0x4 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path1' -Name CacheLimit -Type DWord -Value 0x100 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path2' -Name CacheLimit -Type DWord -Value 0x100 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path3' -Name CacheLimit -Type DWord -Value 0x100 -Force
+    Set-SystemSetting -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\Cache\Paths\path4' -Name CacheLimit -Type DWord -Value 0x100 -Force
+  
     Set-UserSetting -Message "VDI Optimizations :: Disabling Storage Sense [01]" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -Name 01 -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations :: Disabling Storage Sense [02]" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -Name 02 -Type DWord -Value 0 -Force
     Set-UserSetting -Message "VDI Optimizations :: Disabling Storage Sense [04]" -Path 'SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy' -Name 04 -Type DWord -Value 0 -Force
@@ -2923,7 +2930,7 @@ If ($OptimizeForVDI)
 Else{$stepCounter++}
 
 
-IF($OptimizeNetwork){
+If($OptimizeNetwork){
 
     Write-LogEntry "VDI Optimizations :: Configuring SMB Modifications for performance"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name 'DisableBandwidthThrottling' -Type "DWORD" -Value "1" -Force
@@ -3139,6 +3146,14 @@ If($ShowHiddenFiles)
 }
 Else{$stepCounter++}
 
+
+If($RemoveVMToolsTrayIcon){
+    if ( Test-Path "$Env:Programfiles\VMware\VMware Tools" ){
+        Write-LogEntry ("Removing VM Tools Tray icon from taskbar...") -Severity 1 -Outhost
+        Set-SystemSetting -Path 'HKLM:\SOFTWARE\VMware, Inc.\VMware Tools' -Name 'ShowTray' -Type DWord -Value 0 -Force
+    }
+}
+Else{$stepCounter++}
 
 If($ShowThisPCOnDesktop)
 {
