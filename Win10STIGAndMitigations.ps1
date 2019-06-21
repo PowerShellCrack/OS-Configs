@@ -7,8 +7,12 @@
         Utilizes LGPO.exe to apply group policy item where neceassary.
         Utilizes MDT/SCCM TaskSequence property control
         Configurable using custom variables in MDT/SCCM
-
+    
+    .EXAMPLE
+        powershell.exe -ExecutionPolicy Bypass -file "Win10STIGAndMitigations.ps1"
+    
     .INFO
+        Script:         Win10STIGAndMitigations.ps1
         Author:         Richard Tracy
         Email:          richard.tracy@hotmail.com
         Twitter:        @rick2_1979

@@ -8,7 +8,11 @@
         Utilizes MDT/SCCM TaskSequence property control
             Configurable using custom variables in MDT/SCCM
     
+    .EXAMPLE
+        powershell.exe -ExecutionPolicy Bypass -file "AppOptimizeAndConfig.ps1"
+    
     .INFO
+        Script:         AppOptimizeAndConfig.ps1
         Author:         Richard Tracy
         Email:          richard.tracy@hotmail.com
         Twitter:        @rick2_1979
