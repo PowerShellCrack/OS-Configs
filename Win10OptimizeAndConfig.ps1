@@ -198,6 +198,7 @@ Function Test-IsISE {
         return $false;
     }
 }
+
 Function Get-ScriptPath {
     # Makes debugging from ISE easier.
     if ($PSScriptRoot -eq "")
@@ -281,7 +282,7 @@ Function Get-SMSTSENV{
             return $Script:tsenv
         }
     }
-  }
+}
   
 
 
