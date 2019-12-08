@@ -8,7 +8,11 @@
         Utilizes MDT/SCCM TaskSequence property control
             Configurable using custom variables in MDT/SCCM
 
+    .EXAMPLE
+        powershell.exe -ExecutionPolicy Bypass -file "Win10OptimizeAndConfig.ps1"
+    
     .INFO
+        Script:         Win10OptimizeAndConfig.ps1
         Author:         Richard Tracy
         Email:          richard.tracy@hotmail.com
         Twitter:        @rick2_1979
@@ -349,7 +353,7 @@ Function Write-LogEntry{
             Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
         }
         catch {
-            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
+            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.Message) -ForegroundColor Red
         }
     }
     End{
@@ -486,7 +490,7 @@ Function Set-Bluetooth{
                 Await ($bluetooth.SetStateAsync($DeviceStatus)) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
             }
             Catch{
-                Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.Message) -Severity 3 -Source ${CmdletName}
             }
             Finally{
                 #If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
@@ -670,28 +674,31 @@ Function Set-SystemSetting {
         }
         Catch{
             If($TryLGPO -and $LGPOExe){
-                Write-LogEntry ("LGPO failed to run. exit code: {0}. Hardcoding registry keys [{1}\{2}\{3}]" -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("LGPO failed to run. exit code: {0}. Setting registry keys [{1}\{2}\{3}] instead" -f $result.ExitCode,$RegHive,$RegKeyPath,$RegKeyName) -Severity 3 -Source ${CmdletName}
             }
         }
         Finally
         {
             #wait for LGPO file to finish generating
             start-sleep 1
-            
+
             #verify the registry value has been set
             Try{
                 If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
-                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
-                    New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
-                    New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Path was not found; Creating path and setting registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    #New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
+                    New-Item ($RegHive +'\'+ $RegKeyPath) -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | New-ItemProperty -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -ErrorAction Stop | Out-Null
+                    #wait for registry path to popluate (only on slower systems)
+                    #start-sleep 2
+                    #New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 } 
                 Else{
-                    Write-LogEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
-                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Setting key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
+                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 }
             }
             Catch{
-                Write-LogEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegHive,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName}
+                Write-LogEntry ("Unable to configure registry key [{0}\{1}\{2}]. {4}" -f $RegHive,$RegKeyPath,$RegKeyName,$Value,$_.Exception.Message) -Severity 3 -Source ${CmdletName}
             }
 
         }
@@ -2592,7 +2599,7 @@ If ($EnableWinRM)
 
     }
     Catch{
-        Write-LogEntry ("Unable to setup WinRM: {0}" -f $_.Exception.ErrorMessage) -Severity 3
+        Write-LogEntry ("Unable to setup WinRM: {0}" -f $_.Exception.Message) -Severity 3
     }
 }
 Else{$stepCounter++}
@@ -2735,7 +2742,7 @@ If($EnableCredGuard)
             Write-LogEntry "Successfully enabled Microsoft-Hyper-V-HyperVisor feature"
         }
         catch [System.Exception] {
-            Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. Error: -f $_") -Severity 3
+            Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. {0}" -f $_) -Severity 3
         }
 
         try {
@@ -2744,7 +2751,7 @@ If($EnableCredGuard)
             Write-LogEntry "Successfully enabled IsolatedUserMode feature"
         }
         catch [System.Exception] {
-            Write-LogEntry ("An error occured when enabling IsolatedUserMode. Error: -f $_") -Severity 3
+            Write-LogEntry ("An error occured when enabling IsolatedUserMode. {0}" -f $_) -Severity 3
         }
     }
     
@@ -2759,7 +2766,7 @@ If($EnableCredGuard)
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Enabled' -Type DWord -Value 1 -Force
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Name 'Locked' -Type DWord -Value 0 -Force
 
-    Write-LogEntry "STIG Rule ID: SV-78089r7_rule :: Enabling Credential Guard on domain-joined systems"
+    Write-LogEntry "Enabling Credential Guard on domain-joined systems"
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LsaCfgFlags' -Type DWord -Value 1 -Force   
     
     $DeviceGuardProperty = Get-CimInstance –ClassName Win32_DeviceGuard –Namespace root\Microsoft\Windows\DeviceGuard

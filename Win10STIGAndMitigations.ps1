@@ -7,8 +7,12 @@
         Utilizes LGPO.exe to apply group policy item where neceassary.
         Utilizes MDT/SCCM TaskSequence property control
         Configurable using custom variables in MDT/SCCM
-
+    
+    .EXAMPLE
+        powershell.exe -ExecutionPolicy Bypass -file "Win10STIGAndMitigations.ps1"
+    
     .INFO
+        Script:         Win10STIGAndMitigations.ps1
         Author:         Richard Tracy
         Email:          richard.tracy@hotmail.com
         Twitter:        @rick2_1979
@@ -229,7 +233,7 @@ Function Write-LogEntry{
             Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
         }
         catch {
-            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
+            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.Message) -ForegroundColor Red
         }
     }
     End{
@@ -284,7 +288,7 @@ Function Set-Bluetooth{
                 Await ($bluetooth.SetStateAsync($DeviceStatus)) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
             }
             Catch{
-                Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.ErrorMessage) -Severity 3 -Source ${CmdletName}
+                Write-LogEntry ("Unable to configure Bluetooth Settings: {0}" -f $_.Exception.Message) -Severity 3 -Source ${CmdletName}
             }
             Finally{
                 #If ((Get-Service bthserv).Status -eq 'Stopped') { Start-Service bthserv }
@@ -538,17 +542,20 @@ Function Set-SystemSetting {
             #verify the registry value has been set
             Try{
                 If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
-                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
-                    New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
-                    New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Path was not found; Creating path and setting registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    #New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
+                    New-Item ($RegHive +'\'+ $RegKeyPath) -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | New-ItemProperty -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -ErrorAction Stop | Out-Null
+                    #wait for registry path to popluate (only on slower systems)
+                    #start-sleep 2
+                    #New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 } 
                 Else{
-                    Write-LogEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
-                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Setting key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
+                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 }
             }
             Catch{
-                Write-LogEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegHive,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName}
+                Write-LogEntry ("Unable to configure registry key [{0}\{1}\{2}]. {4}" -f $RegHive,$RegKeyPath,$RegKeyName,$Value,$_.Exception.Message) -Severity 3 -Source ${CmdletName}
             }
 
         }
@@ -974,7 +981,7 @@ If($ApplySTIGItems )
                 Write-LogEntry "Successfully enabled Microsoft-Hyper-V-HyperVisor feature" -Outhost
             }
             catch [System.Exception] {
-                Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. Error: -f $_") -Severity 3 -Outhost
+                Write-LogEntry ("An error occured when enabling Microsoft-Hyper-V-HyperVisor. {0}" -f $_) -Severity 3 -Outhost
             }
 
             try {
@@ -983,7 +990,7 @@ If($ApplySTIGItems )
                 Write-LogEntry "Successfully enabled IsolatedUserMode feature" -Outhost
             }
             catch [System.Exception] {
-                Write-LogEntry ("An error occured when enabling IsolatedUserMode. Error: -f $_") -Severity 3 -Outhost
+                Write-LogEntry ("An error occured when enabling IsolatedUserMode. {0}" -f $_) -Severity 3 -Outhost
             }
         }
 
@@ -1024,7 +1031,7 @@ If($ApplySTIGItems )
         'admin' {$value = 2;$label = "to Require Admin approval"}
         default {$value = 1;$label = "to Warning Users"}
     }
-    Show-ProgressStatus -Message "Configuring Smart Screen Filte :: Configuring Smart Screen Filter $label" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "Configuring Smart Screen Filter :: Configuring Smart Screen Filter $label" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'EnableSmartScreen' -Type DWord -Value $value -Force -TryLGPO:$true
     Set-SystemSetting -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'ShellSmartScreenLevel' -Type String -Value "Block" -Force -TryLGPO:$true
 
@@ -1098,7 +1105,7 @@ If($ApplySTIGItems )
     Show-ProgressStatus -Message "STIG Rule ID: SV-78287r1_rule :: Disabling LAN Manager hash of passwords for storage" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'NoLMHash' -Value 1 -Force
 
-    Show-ProgressStatus -Message "STIG Rule ID:  SV-78291r1_rule :: Disabling NTLMv2 response only, and to refuse LM and NTLM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78291r1_rule :: Disabling NTLMv2 response only, and to refuse LM and NTLM" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name 'LmCompatibilityLevel' -Value 5 -Force
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78293r1_rule :: Enabling LDAP client signing level" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
@@ -1116,7 +1123,7 @@ If($ApplySTIGItems )
     Show-ProgressStatus -Message "STIG Rule ID: SV-78143r1_rule :: Disabling the ability to reset computer account password" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'DisablePasswordChange' -Value 1 -Force
     
-    Show-ProgressStatus -Message "STIG Rule ID:  SV-78151r1_rule :: Configuring maximum age for machine account password to 30 days" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
+    Show-ProgressStatus -Message "STIG Rule ID: SV-78151r1_rule :: Configuring maximum age for machine account password to 30 days" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost
     Set-SystemSetting -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name 'MaximumPasswordAge' -Value 30 -Force
 
     Show-ProgressStatus -Message "STIG Rule ID: SV-78155r1_rule :: Configuring strong session key for machine account password" -Step ($stepCounter++) -MaxStep $script:Maxsteps -Outhost

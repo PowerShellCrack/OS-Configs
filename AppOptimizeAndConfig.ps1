@@ -7,7 +7,12 @@
         Utilizes LGPO.exe to apply group policy item where neceassary.
         Utilizes MDT/SCCM TaskSequence property control
             Configurable using custom variables in MDT/SCCM
+    
+    .EXAMPLE
+        powershell.exe -ExecutionPolicy Bypass -file "AppOptimizeAndConfig.ps1"
+    
     .INFO
+        Script:         AppOptimizeAndConfig.ps1
         Author:         Richard Tracy
         Email:          richard.tracy@hotmail.com
         Twitter:        @rick2_1979
@@ -237,7 +242,7 @@ Function Write-LogEntry{
             Out-File -InputObject $LogFormat -Append -NoClobber -Encoding Default -FilePath $OutputLogFile -ErrorAction Stop
         }
         catch {
-            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.ErrorMessage) -ForegroundColor Red
+            Write-Host ("[{0}] [{1}] :: Unable to append log entry to [{1}], error: {2}" -f $LogTimePlusBias,$ScriptSource,$OutputLogFile,$_.Exception.Message) -ForegroundColor Red
         }
     }
     End{
@@ -516,17 +521,20 @@ Function Set-SystemSetting {
             #verify the registry value has been set
             Try{
                 If( -not(Test-Path ($RegHive +'\'+ $RegKeyPath)) ){
-                    Write-LogEntry ("Key was not set; Hardcoding registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
-                    New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
-                    New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Path was not found; Creating path and setting registry keys [{0}\{1}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Severity 0 -Source ${CmdletName}
+                    #New-Item -Path ($RegHive +'\'+ $RegKeyPath) -Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
+                    New-Item ($RegHive +'\'+ $RegKeyPath) -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | New-ItemProperty -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -ErrorAction Stop | Out-Null
+                    #wait for registry path to popluate (only on slower systems)
+                    #start-sleep 2
+                    #New-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -PropertyType $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 } 
                 Else{
-                    Write-LogEntry ("Key name not found. Creating key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
-                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue -PassThru
+                    Write-LogEntry ("Setting key name [{1}] at path [{0}] with value [{2}]" -f ($RegHive +'\'+ $RegKeyPath),$RegKeyName,$Value) -Source ${CmdletName}
+                    Set-ItemProperty -Path ($RegHive +'\'+ $RegKeyPath) -Name $RegKeyName -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction Stop | Out-Null
                 }
             }
             Catch{
-                Write-LogEntry ("Unable to set registry key [{0}\{1}\{2}] with value [{3}]" -f $RegHive,$RegKeyPath,$RegKeyName,$Value) -Severity 2 -Source ${CmdletName}
+                Write-LogEntry ("Unable to configure registry key [{0}\{1}\{2}]. {4}" -f $RegHive,$RegKeyPath,$RegKeyName,$Value,$_.Exception.Message) -Severity 3 -Source ${CmdletName}
             }
 
         }
@@ -701,7 +709,12 @@ Function Set-UserSetting {
                 If ($HiveLoaded -eq $true) {   
                     If($Message){Write-LogEntry ("{0} for User [{1}].." -f $Message,$UserName)}
                     If($Remove){
-                        Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
+                        Try{
+                            Remove-ItemProperty "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
+                        }
+                        Catch{
+                            Write-LogEntry ("Unable to remove registry key [{0}\{1}\{2}]. {4}" -f $RegHive,$RegKeyPath,$RegKeyName,$Value,$_.Exception.Message) -Severity 3 -Source ${CmdletName}
+                        }
                     }
                     Else{
                         Set-SystemSetting -Path "$RegHive\$($UserProfile.SID)\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -TryLGPO:$TryLGPO
@@ -720,7 +733,12 @@ Function Set-UserSetting {
         Else{
             If($Message){Write-LogEntry ("{0} for [{1}].." -f $Message,$ProfileList.UserName)}
             If($Remove){
-                Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null  
+                Try{
+                    Remove-ItemProperty "$RegHive\$RegKeyPath\$RegKeyPath" -Name $RegKeyName -Force:$Force -WhatIf:$WhatIfPreference -ErrorAction SilentlyContinue | Out-Null
+                }
+                Catch{
+                    Write-LogEntry ("Unable to remove registry key [{0}\{1}\{2}]. {4}" -f $RegHive,$RegKeyPath,$RegKeyName,$Value,$_.Exception.Message) -Severity 3 -Source ${CmdletName}
+                }
             }
             Else{
                 Set-SystemSetting -Path "$RegHive\$RegKeyPath" -Name $RegKeyName -Type $Type -Value $Value -Force:$Force -WhatIf:$WhatIfPreference -TryLGPO:$TryLGPO
@@ -1104,6 +1122,7 @@ If($RemoveAppxPackages)
 
     $p = 1
     $c = 0
+    $d = 0
     # Loop through the list of appx packages
     foreach ($App in $AppArrayList) {
 
@@ -1113,41 +1132,48 @@ If($RemoveAppxPackages)
         }
         else {
             # Gather package names
-            $AppPackageFullName = Get-AppxPackage -Name $App.Name | Select-Object -ExpandProperty PackageFullName
+            $AppPackageDetails = Get-AppxPackage -AllUsers -Name $App.Name 
             
-            $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $App.Name } | Select-Object -ExpandProperty PackageName
+            $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $AppPackageDetails.Name } | Select-Object -ExpandProperty PackageName
 
             # Attempt to remove AppxPackage
-            if ($null -ne $AppPackageFullName) {
-                Show-ProgressStatus -Message ("Removing application package: {0}" -f $App.Name) -Step $p -MaxStep $AppArrayList.count
+            if ($null -ne $AppPackageDetails) {
+                Show-ProgressStatus -Message ("Removing application package: {0}" -f $AppPackageDetails.Name) -Step $p -MaxStep $AppArrayList.count
                 
                 try {
-                    Remove-AppxPackage -Package $AppPackageFullName -ErrorAction Stop | Out-Null
+                    Remove-AppxPackage -AllUsers -Package $AppPackageDetails.PackageFullName -ErrorAction Stop | Out-Null
                     
-                    Write-LogEntry -Message ("Successfully removed application package: {0}" -f $App.Name) -Outhost
+                    Write-LogEntry -Message ("Successfully removed application package: {0}" -f $AppPackageDetails.PackageFullName) -Outhost
                     $c++
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Message ("Failed removing AppxPackage: {0}" -f $_.Message) -Severity 3 -Outhost
+                    Write-LogEntry -Message ("Failed removing AppxPackage: {0}" -f $_) -Severity 3 -Outhost
+                }   
+                Finally{
+                    Write-LogEntry -Message ("--------------------------------------------------" ) -Outhost
                 }
             }
             else {
-                Write-LogEntry -Message ("Unable to locate AppxPackage for app: {0}" -f $App.Name) -Outhost
+                Write-LogEntry -Message ("Unable to locate AppxPackage for app: {0}" -f $AppPackageDetails.Name) -Outhost
             }
 
             # Attempt to remove AppxProvisioningPackage
-            if ($null -eq $AppProvisioningPackageName) {
-                Write-LogEntry -Message ("Removing application provisioning package: {0}" -f $AppProvisioningPackageName)
+            if ($null -ne $AppProvisioningPackageName) {
+                Write-LogEntry -Message ("Removing application PROVISIONED package: {0}" -f $AppProvisioningPackageName)
                 try {
                     Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
-                    Write-LogEntry -Message ("Successfully removed application provisioning package: {0}" -f $AppProvisioningPackageName) -Outhost
+                    Write-LogEntry -Message ("Successfully removed application PROVISIONED package: {0}" -f $AppProvisioningPackageName) -Outhost
+                    $d++
                 }
                 catch [System.Exception] {
-                    Write-LogEntry -Message ("Failed removing Appx Provisioning Package: {0}" -f $_.Message) -Severity 3 -Outhost
+                    Write-LogEntry -Message ("Failed removing Appx PROVISIONED Package: {0}" -f $_) -Severity 3 -Outhost
+                }
+                Finally{
+                    Write-LogEntry -Message ("--------------------------------------------------" ) -Outhost
                 }
             }
             else {
-                Write-LogEntry -Message ("Unable to locate Appx Provisioning Package for app: {0}" -f $App.Name) -Outhost
+                Write-LogEntry -Message ("Unable to locate Appx PROVISIONED Package for app: {0}" -f $AppPackageDetails.Name) -Outhost
             }
 
         }
@@ -1155,7 +1181,8 @@ If($RemoveAppxPackages)
         $p++
     }
 
-    Write-LogEntry -Message ("Removed {0} built-in AppxPackage and AppxProvisioningPackage" -f $c) -Outhost
+    Write-LogEntry -Message ("Removed {0} All Users App Package's" -f $c) -Outhost
+    Write-LogEntry -Message ("Removed {0} built-in App PROVISIONED Package's" -f $d) -Outhost
 }
 Else{$stepCounter++}
 
